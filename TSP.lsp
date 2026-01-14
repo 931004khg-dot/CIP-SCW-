@@ -763,10 +763,10 @@
   
   ;; 하단 플랜지 - 우측
   (setq pt7  (list (+ cx (+ half-tw fillet-r)) (- cy (- half-h half-tf)))) ; 7. 필렛 끝 (웹 근처, 우하)
-  (setq pt8  (list (+ cx half-b) (- cy (- half-h half-tf))))               ; 8. 우하 플랜지 하단
+  (setq pt8  (list (+ cx half-b) (- cy half-h)))                           ; 8. 우하단 외부 모서리
   
   ;; 하단 플랜지 - 좌측
-  (setq pt9  (list (- cx half-b) (- cy (- half-h half-tf))))               ; 9. 좌하 플랜지 하단
+  (setq pt9  (list (- cx half-b) (- cy half-h)))                           ; 9. 좌하단 외부 모서리
   (setq pt10 (list (- cx half-b) (- cy (- half-h half-tf))))               ; 10. 좌하 플랜지 상단
   (setq pt11 (list (- cx (+ half-tw fillet-r)) (- cy (- half-h half-tf)))) ; 11. 필렛 시작 (웹 근처, 좌하)
   
