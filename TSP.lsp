@@ -695,7 +695,7 @@
 ;;; 경계선에 H-Pile 세트 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt)
+(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt)
   ;; 가장 긴 세그먼트 찾기
   (setq longest-seg (get-longest-segment boundary-ent))
   
@@ -711,10 +711,37 @@
       ))
       
       (princ (strcat "\n가장 긴 세그먼트 길이: " (rtos (distance pt1 pt2) 2 2) "mm"))
-      (princ (strcat "\n중점 위치: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
+      (princ (strcat "\n경계선 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
       
-      ;; H-Pile 세트 생성
-      (create-hpile-set mid-pt hpile-spec ctc)
+      ;; H-Pile 높이 파싱 (하단을 경계선에 맞추기 위한 오프셋 계산)
+      (if (= hpile-spec "User-defined")
+        (setq hpile-values *tsp-hpile-custom*)
+        (setq hpile-values (parse-h-spec hpile-spec))
+      )
+      
+      (if hpile-values
+        (progn
+          (setq h (nth 0 hpile-values))  ; H-Pile 높이 (mm)
+          
+          ;; H-Pile 중심을 위로 올려서 하단이 경계선에 오도록 조정
+          ;; 하단 플랜지 외부 모서리가 경계선에 오려면: cy = boundary_y + half-h
+          (setq offset-pt (list
+            (car mid-pt)
+            (+ (cadr mid-pt) (/ h 2.0))  ; Y 좌표를 half-h만큼 위로
+          ))
+          
+          (princ (strcat "\nH-Pile 높이: " (rtos h 2 0) "mm"))
+          (princ (strcat "\nH-Pile 중심 (조정 후): (" (rtos (car offset-pt) 2 2) ", " (rtos (cadr offset-pt) 2 2) ")"))
+          (princ (strcat "\n→ 하단 플랜지 Y 좌표: " (rtos (cadr mid-pt) 2 2) " (경계선)"))
+          
+          ;; H-Pile 세트 생성 (조정된 중심점 사용)
+          (create-hpile-set offset-pt hpile-spec ctc)
+        )
+        (progn
+          (princ "\n[ERROR] H-Pile 규격 파싱 실패!")
+          nil
+        )
+      )
     )
     (progn
       (princ "\n경계선에서 세그먼트를 찾을 수 없습니다!")
@@ -832,14 +859,27 @@
 ;;; 토류판 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-timber-panel (pt1 pt2 width / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy)
+(defun create-timber-panel (pt1 pt2 width h tf / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy half-h flange-top-y panel-height)
   ;; pt1, pt2: H-Pile 중심점
   ;; width: 토류판 두께 (70mm)
+  ;; h: H-Pile 높이 (mm)
+  ;; tf: 플랜지 두께 (mm)
   
-  ;; 두 점 사이의 중점 계산
+  ;; H-Pile 하단 플랜지 상단 Y 좌표 계산
+  (setq half-h (/ h 2.0))
+  (setq flange-top-y (- (cadr pt1) (- half-h tf)))  ; cy - (half-h - tf)
+  
+  ;; 토류판 높이 (기본 1000mm)
+  (setq panel-height 1000.0)
+  
+  (princ (strcat "\n[토류판] H-Pile 하단 플랜지 상단 Y: " (rtos flange-top-y 2 2)))
+  (princ (strcat "\n[토류판] 토류판 하단 Y: " (rtos flange-top-y 2 2)))
+  (princ (strcat "\n[토류판] 토류판 상단 Y: " (rtos (+ flange-top-y panel-height) 2 2)))
+  
+  ;; 두 점 사이의 중점 계산 (X 방향만)
   (setq mid-pt (list
     (/ (+ (car pt1) (car pt2)) 2.0)
-    (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+    (cadr pt1)  ; Y는 중심점 그대로 사용 (나중에 flange-top-y로 조정)
   ))
   
   ;; 방향 벡터
@@ -855,42 +895,37 @@
   (setq panel-length (- length 50))
   
   ;; 토류판 4개 점 계산
-  ;; 방향에 수직인 벡터 계산
+  ;; 방향에 수직인 벡터 계산 (위쪽 방향)
   (setq perp-dx (- dy))
   (setq perp-dy dx)
   
   ;; 토류판의 4개 꼭지점 (직사각형)
-  ;; pt1에서 25mm 떨어진 점 + 수직 방향으로 width/2
+  ;; 하단 왼쪽: pt1에서 25mm 떨어진 점 (하단 플랜지 상단에 붙음)
   (setq panel-pt1 (list
     (+ (car pt1) (* dx 25.0) (* perp-dx (/ width 2.0)))
-    (+ (cadr pt1) (* dy 25.0) (* perp-dy (/ width 2.0)))
+    flange-top-y  ; 하단 플랜지 상단에 붙음
   ))
   
-  ;; pt2에서 25mm 떨어진 점 + 수직 방향으로 width/2
+  ;; 하단 오른쪽: pt2에서 25mm 떨어진 점 (하단 플랜지 상단에 붙음)
   (setq panel-pt2 (list
     (- (car pt2) (* dx 25.0) (* perp-dx (/ width 2.0)))
-    (- (cadr pt2) (* dy 25.0) (* perp-dy (/ width 2.0)))
+    flange-top-y  ; 하단 플랜지 상단에 붙음
   ))
   
-  ;; pt2에서 25mm 떨어진 점 - 수직 방향으로 width/2
+  ;; 상단 오른쪽: 하단에서 panel-height만큼 위로
   (setq panel-pt3 (list
     (+ (- (car pt2) (* dx 25.0)) (* perp-dx (/ width 2.0)))
-    (+ (- (cadr pt2) (* dy 25.0)) (* perp-dy (/ width 2.0)))
+    (+ flange-top-y panel-height)
   ))
   
-  ;; pt1에서 25mm 떨어진 점 - 수직 방향으로 width/2
+  ;; 상단 왼쪽: 하단에서 panel-height만큼 위로
   (setq panel-pt4 (list
     (- (+ (car pt1) (* dx 25.0)) (* perp-dx (/ width 2.0)))
-    (- (+ (cadr pt1) (* dy 25.0)) (* perp-dy (/ width 2.0)))
+    (+ flange-top-y panel-height)
   ))
   
   ;; 폴리라인 생성 (entmake 사용)
-  ;; 순서 수정: 교차 방지를 위해 직사각형 순서로 연결
-  ;; panel-pt1: pt1 + 25dx + (width/2)perp
-  ;; panel-pt2: pt2 - 25dx - (width/2)perp
-  ;; panel-pt3: pt2 - 25dx + (width/2)perp
-  ;; panel-pt4: pt1 + 25dx - (width/2)perp
-  ;; 올바른 순서: pt4 → pt2 → pt3 → pt1 (닫힘으로 pt4로 복귀)
+  ;; 순서: 하단 왼쪽 → 하단 오른쪽 → 상단 오른쪽 → 상단 왼쪽
   (entmake
     (list
       '(0 . "LWPOLYLINE")
@@ -900,10 +935,10 @@
       '(62 . 1)  ; 색상: 빨강(1)
       '(90 . 4)  ; 정점 개수
       '(70 . 1)  ; 닫힘 플래그
-      (cons 10 panel-pt4)  ; pt1 - (width/2)perp
-      (cons 10 panel-pt2)  ; pt2 - (width/2)perp
-      (cons 10 panel-pt3)  ; pt2 + (width/2)perp
-      (cons 10 panel-pt1)  ; pt1 + (width/2)perp
+      (cons 10 panel-pt1)  ; 하단 왼쪽
+      (cons 10 panel-pt2)  ; 하단 오른쪽
+      (cons 10 panel-pt3)  ; 상단 오른쪽
+      (cons 10 panel-pt4)  ; 상단 왼쪽
     )
   )
   
@@ -981,7 +1016,7 @@
   
   ;; 토류판 생성
   (princ "\n토류판 생성...")
-  (setq timber (create-timber-panel pt1 pt2 70))
+  (setq timber (create-timber-panel pt1 pt2 70 h tf))
   
   (princ "\nH-Pile 세트 생성 완료!")
   (debug-log "=== create-hpile-set 완료 ===")
