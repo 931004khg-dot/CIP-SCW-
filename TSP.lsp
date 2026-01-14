@@ -257,45 +257,52 @@
 ;;; H형강 규격 파싱
 ;;; ----------------------------------------------------------------------
 
-(defun parse-h-spec (spec-str / temp-str h b tw tf pos1 pos2 pos3 pos4)
+(defun parse-h-spec (spec-str / parts result)
   ;; "H 298×201×9/14" -> (298 201 9 14)
+  ;; × 문자를 x로 치환하고, /를 공백으로 치환하여 파싱
   (if (and spec-str (wcmatch spec-str "H *"))
     (progn
       ;; "H " 제거
-      (setq temp-str (substr spec-str 3))
+      (setq spec-str (substr spec-str 3))
       
-      ;; 첫 번째 × 찾기
-      (setq pos1 (vl-string-search "×" temp-str))
-      (if pos1
-        (progn
-          (setq h (atoi temp-str))
-          (setq temp-str (substr temp-str (+ pos1 4)))  ; UTF-8 × 문자는 3바이트
-          
-          ;; 두 번째 × 찾기
-          (setq pos2 (vl-string-search "×" temp-str))
-          (if pos2
-            (progn
-              (setq b (atoi temp-str))
-              (setq temp-str (substr temp-str (+ pos2 4)))
-              
-              ;; / 찾기
-              (setq pos3 (vl-string-search "/" temp-str))
-              (if pos3
-                (progn
-                  (setq tw (atoi temp-str))
-                  (setq temp-str (substr temp-str (+ pos3 2)))
-                  (setq tf (atoi temp-str))
-                  
-                  (list h b tw tf)
-                )
-                nil
-              )
-            )
-            nil
+      ;; × -> x, / -> 공백으로 치환
+      (while (vl-string-search "×" spec-str)
+        (setq spec-str 
+          (strcat 
+            (substr spec-str 1 (vl-string-search "×" spec-str))
+            "x"
+            (substr spec-str (+ (vl-string-search "×" spec-str) 4))
           )
         )
-        nil
       )
+      
+      (while (vl-string-search "/" spec-str)
+        (setq spec-str 
+          (strcat 
+            (substr spec-str 1 (vl-string-search "/" spec-str))
+            " "
+            (substr spec-str (+ (vl-string-search "/" spec-str) 2))
+          )
+        )
+      )
+      
+      ;; "298x201x9 14" 형태가 됨
+      ;; x를 공백으로 치환
+      (while (vl-string-search "x" spec-str)
+        (setq spec-str 
+          (strcat 
+            (substr spec-str 1 (vl-string-search "x" spec-str))
+            " "
+            (substr spec-str (+ (vl-string-search "x" spec-str) 2))
+          )
+        )
+      )
+      
+      ;; "298 201 9 14" 형태가 됨
+      ;; read를 사용하여 리스트로 변환
+      (setq result (read (strcat "(" spec-str ")")))
+      
+      result
     )
     nil
   )
@@ -305,7 +312,7 @@
 ;;; 띠장 옵셋 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4)
+(defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4 ent-data ent-type first-vertex inside-pt wale-values)
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
   
@@ -332,22 +339,40 @@
   (setq obj1 (entlast))
   (command "._CHPROP" obj1 "" "_LA" "_띠장(wale)" "_C" "3" "")
   
-  ;; 객체 2: tf 옵셋 - 빨간색
-  (command "._OFFSET" tf boundary-ent "_non" '(0 0 0) "")
+  ;; 경계선의 내부 점 찾기 (중심점 방향으로 옵셋하기 위함)
+  (setq ent-data (entget boundary-ent))
+  (setq ent-type (cdr (assoc 0 ent-data)))
+  
+  ;; LWPOLYLINE인 경우 첫 번째 정점 가져오기
+  (if (= ent-type "LWPOLYLINE")
+    (progn
+      (setq first-vertex (cdr (assoc 10 ent-data)))
+      ;; 내부 방향 점 (안쪽으로 조금 이동)
+      (setq inside-pt (list (- (car first-vertex) 1) (- (cadr first-vertex) 1)))
+    )
+    ;; LINE인 경우
+    (progn
+      (setq first-vertex (cdr (assoc 10 ent-data)))
+      (setq inside-pt (list (- (car first-vertex) 1) (- (cadr first-vertex) 1)))
+    )
+  )
+  
+  ;; 객체 2: tf 옵셋 - 빨간색 (안쪽)
+  (command "._OFFSET" tf boundary-ent inside-pt "")
   (setq obj2 (entlast))
   (if obj2
     (command "._CHPROP" obj2 "" "_LA" "_띠장(wale)" "_C" "1" "")
   )
   
-  ;; 객체 3: (H - tf) 옵셋 - 빨간색
-  (command "._OFFSET" (- h tf) boundary-ent "_non" '(0 0 0) "")
+  ;; 객체 3: (H - tf) 옵셋 - 빨간색 (안쪽)
+  (command "._OFFSET" (- h tf) boundary-ent inside-pt "")
   (setq obj3 (entlast))
   (if obj3
     (command "._CHPROP" obj3 "" "_LA" "_띠장(wale)" "_C" "1" "")
   )
   
-  ;; 객체 4: H 옵셋 - 초록색
-  (command "._OFFSET" h boundary-ent "_non" '(0 0 0) "")
+  ;; 객체 4: H 옵셋 - 초록색 (안쪽)
+  (command "._OFFSET" h boundary-ent inside-pt "")
   (setq obj4 (entlast))
   (if obj4
     (command "._CHPROP" obj4 "" "_LA" "_띠장(wale)" "_C" "3" "")
@@ -833,11 +858,10 @@
     (progn
       (command "._CHPROP" pline-ent "" "_LA" "_토류판(timber)" "_C" "1" "")
       
-      ;; 해치 생성
-      (command "._BHATCH"
+      ;; 해치 생성 (축척 30 적용)
+      (command "._-BHATCH"
         "_P" "ANSI36"
-        "_S" "30"
-        "_AN" "0"
+        "_S" 30
         "_SEL" pline-ent ""
         ""
       )
