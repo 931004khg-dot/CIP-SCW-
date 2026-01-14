@@ -14,9 +14,9 @@
 ;;; 전역 변수
 ;;; ----------------------------------------------------------------------
 
-(setq *tsp-hpile-spec* "H 298x201x9/14")     ; H-Pile 규격
+(setq *tsp-hpile-spec* "H 298×201×9/14")     ; H-Pile 규격
 (setq *tsp-hpile-custom* '(298 201 9 14))    ; User-defined H-Pile
-(setq *tsp-wale-spec* "H 300x300x10/15")      ; 띠장 규격
+(setq *tsp-wale-spec* "H 300×300×10/15")      ; 띠장 규격
 (setq *tsp-wale-custom* '(300 300 10 15))     ; User-defined 띠장
 (setq *tsp-ctc* 2.0)                           ; C.T.C 값
 
@@ -254,24 +254,24 @@
 ;;; ----------------------------------------------------------------------
 
 (defun parse-h-spec (spec-str / parts h b tw tf)
-  ;; "H 300x300x10/15" -> (300 300 10 15)
-  (if (wcmatch spec-str "H *x*x*/*")
+  ;; "H 300×300×10/15" -> (300 300 10 15)
+  (if (wcmatch spec-str "H *×*×*/*")
     (progn
       ;; "H " 제거
       (setq spec-str (substr spec-str 3))
       
-      ;; "x"와 "/"로 분할
+      ;; "×"와 "/"로 분할
       (setq parts '())
       (setq pos 1)
       
       ;; 간단한 파싱 (숫자 추출)
       (setq h (atoi spec-str))
       
-      (setq pos (vl-string-search "x" spec-str))
+      (setq pos (vl-string-search "×" spec-str))
       (setq spec-str (substr spec-str (+ pos 2)))
       (setq b (atoi spec-str))
       
-      (setq pos (vl-string-search "x" spec-str))
+      (setq pos (vl-string-search "×" spec-str))
       (setq spec-str (substr spec-str (+ pos 2)))
       (setq tw (atoi spec-str))
       
@@ -291,7 +291,7 @@
 
 (defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4)
   ;; 레이어 생성
-  (create-layer-if-not-exists "_띠장" "3")
+  (create-layer-if-not-exists "_띠장(wale)" "3")
   
   ;; 규격 파싱
   (if (= wale-spec "User-defined")
@@ -314,27 +314,27 @@
   ;; 객체 1: 원본 복사 (0mm) - 초록색
   (command "._COPY" boundary-ent "" "0,0,0" "0,0,0")
   (setq obj1 (entlast))
-  (command "._CHPROP" obj1 "" "_LA" "_띠장" "_C" "3" "")
+  (command "._CHPROP" obj1 "" "_LA" "_띠장(wale)" "_C" "3" "")
   
   ;; 객체 2: tf 옵셋 - 빨간색
   (command "._OFFSET" tf boundary-ent "_non" '(0 0 0) "")
   (setq obj2 (entlast))
   (if obj2
-    (command "._CHPROP" obj2 "" "_LA" "_띠장" "_C" "1" "")
+    (command "._CHPROP" obj2 "" "_LA" "_띠장(wale)" "_C" "1" "")
   )
   
   ;; 객체 3: (H - tf) 옵셋 - 빨간색
   (command "._OFFSET" (- h tf) boundary-ent "_non" '(0 0 0) "")
   (setq obj3 (entlast))
   (if obj3
-    (command "._CHPROP" obj3 "" "_LA" "_띠장" "_C" "1" "")
+    (command "._CHPROP" obj3 "" "_LA" "_띠장(wale)" "_C" "1" "")
   )
   
   ;; 객체 4: H 옵셋 - 초록색
   (command "._OFFSET" h boundary-ent "_non" '(0 0 0) "")
   (setq obj4 (entlast))
   (if obj4
-    (command "._CHPROP" obj4 "" "_LA" "_띠장" "_C" "3" "")
+    (command "._CHPROP" obj4 "" "_LA" "_띠장(wale)" "_C" "3" "")
   )
   
   (princ "\n띠장 옵셋 생성 완료!")
@@ -356,14 +356,14 @@
     (progn
       ;; 드롭다운 리스트 초기화
       (start_list "hpile_spec")
-      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
+      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
       (end_list)
-      (set_tile "hpile_spec" "0")  ; 기본값: H 298x201x9/14
+      (set_tile "hpile_spec" "0")  ; 기본값: H 298×201×9/14
       
       (start_list "wale_spec")
-      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
+      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
       (end_list)
-      (set_tile "wale_spec" "1")  ; 기본값: H 300x300x10/15
+      (set_tile "wale_spec" "1")  ; 기본값: H 300×300×10/15
       
       ;; C.T.C 기본값
       (set_tile "ctc" "2")
@@ -428,10 +428,10 @@
            
            ;; H-Pile 규격 저장
            (cond
-             ((= hpile-idx 0) (setq *tsp-hpile-spec* \"H 298x201x9/14\"))
-             ((= hpile-idx 1) (setq *tsp-hpile-spec* \"H 300x300x10/15\"))
-             ((= hpile-idx 2) (setq *tsp-hpile-spec* \"H 350x350x12/19\"))
-             ((= hpile-idx 3) (setq *tsp-hpile-spec* \"H 400x400x13/21\"))
+             ((= hpile-idx 0) (setq *tsp-hpile-spec* \"H 298×201×9/14\"))
+             ((= hpile-idx 1) (setq *tsp-hpile-spec* \"H 300×300×10/15\"))
+             ((= hpile-idx 2) (setq *tsp-hpile-spec* \"H 350×350×12/19\"))
+             ((= hpile-idx 3) (setq *tsp-hpile-spec* \"H 400×400×13/21\"))
              ((= hpile-idx 4) 
               (progn
                 (setq *tsp-hpile-spec* \"User-defined\")
@@ -447,10 +447,10 @@
            
            ;; 띠장 규격 저장
            (cond
-             ((= wale-idx 0) (setq *tsp-wale-spec* \"H 298x201x9/14\"))
-             ((= wale-idx 1) (setq *tsp-wale-spec* \"H 300x300x10/15\"))
-             ((= wale-idx 2) (setq *tsp-wale-spec* \"H 350x350x12/19\"))
-             ((= wale-idx 3) (setq *tsp-wale-spec* \"H 400x400x13/21\"))
+             ((= wale-idx 0) (setq *tsp-wale-spec* \"H 298×201×9/14\"))
+             ((= wale-idx 1) (setq *tsp-wale-spec* \"H 300×300×10/15\"))
+             ((= wale-idx 2) (setq *tsp-wale-spec* \"H 350×350×12/19\"))
+             ((= wale-idx 3) (setq *tsp-wale-spec* \"H 400×400×13/21\"))
              ((= wale-idx 4) 
               (progn
                 (setq *tsp-wale-spec* \"User-defined\")
