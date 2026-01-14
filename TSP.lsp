@@ -257,52 +257,36 @@
 ;;; H형강 규격 파싱
 ;;; ----------------------------------------------------------------------
 
-(defun parse-h-spec (spec-str / parts result)
+(defun parse-h-spec (spec-str / clean-str char-list i ch result-str)
   ;; "H 298×201×9/14" -> (298 201 9 14)
-  ;; × 문자를 x로 치환하고, /를 공백으로 치환하여 파싱
+  ;; 모든 문자를 하나씩 검사하여 숫자와 공백만 남김
   (if (and spec-str (wcmatch spec-str "H *"))
     (progn
       ;; "H " 제거
-      (setq spec-str (substr spec-str 3))
+      (setq clean-str (substr spec-str 3))
+      (setq result-str "")
+      (setq i 1)
       
-      ;; × -> x, / -> 공백으로 치환
-      (while (vl-string-search "×" spec-str)
-        (setq spec-str 
-          (strcat 
-            (substr spec-str 1 (vl-string-search "×" spec-str))
-            "x"
-            (substr spec-str (+ (vl-string-search "×" spec-str) 4))
-          )
+      ;; 문자열의 각 문자를 검사
+      (while (<= i (strlen clean-str))
+        (setq ch (substr clean-str i 1))
+        (cond
+          ;; 숫자인 경우
+          ((and (>= (ascii ch) 48) (<= (ascii ch) 57))
+           (setq result-str (strcat result-str ch)))
+          ;; 공백 추가 (구분자)
+          (t
+           (if (> (strlen result-str) 0)
+             (if (/= (substr result-str (strlen result-str) 1) " ")
+               (setq result-str (strcat result-str " "))
+             )
+           ))
         )
+        (setq i (1+ i))
       )
       
-      (while (vl-string-search "/" spec-str)
-        (setq spec-str 
-          (strcat 
-            (substr spec-str 1 (vl-string-search "/" spec-str))
-            " "
-            (substr spec-str (+ (vl-string-search "/" spec-str) 2))
-          )
-        )
-      )
-      
-      ;; "298x201x9 14" 형태가 됨
-      ;; x를 공백으로 치환
-      (while (vl-string-search "x" spec-str)
-        (setq spec-str 
-          (strcat 
-            (substr spec-str 1 (vl-string-search "x" spec-str))
-            " "
-            (substr spec-str (+ (vl-string-search "x" spec-str) 2))
-          )
-        )
-      )
-      
-      ;; "298 201 9 14" 형태가 됨
-      ;; read를 사용하여 리스트로 변환
-      (setq result (read (strcat "(" spec-str ")")))
-      
-      result
+      ;; "298 201 9 14" 형태의 문자열을 리스트로 변환
+      (read (strcat "(" result-str ")"))
     )
     nil
   )
