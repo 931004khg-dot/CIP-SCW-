@@ -745,26 +745,26 @@
   ;; 상단 플랜지 (좌측 상단부터 시계방향)
   (setq pt1 (list (- (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
   (setq pt2 (list (+ (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
-  (setq pt3 (list (+ (car insert-pt) half-b) (+ (cadr insert-pt) (- half-h half-tf))))
+  (setq pt3 (list (+ (car insert-pt) half-b) (- (+ (cadr insert-pt) half-h) half-tf)))
   
   ;; 웹 우측
-  (setq pt4 (list (+ (car insert-pt) half-tw) (+ (cadr insert-pt) (- half-h half-tf))))
-  (setq pt5 (list (+ (car insert-pt) half-tw) (- (cadr insert-pt) (- half-h half-tf))))
+  (setq pt4 (list (+ (car insert-pt) half-tw) (- (+ (cadr insert-pt) half-h) half-tf)))
+  (setq pt5 (list (+ (car insert-pt) half-tw) (+ (- (cadr insert-pt) half-h) half-tf)))
   
   ;; 하단 플랜지 우측
-  (setq pt6 (list (+ (car insert-pt) half-b) (- (cadr insert-pt) (- half-h half-tf))))
+  (setq pt6 (list (+ (car insert-pt) half-b) (+ (- (cadr insert-pt) half-h) half-tf)))
   (setq pt7 (list (+ (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
   (setq pt8 (list (- (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
   
   ;; 하단 플랜지 좌측
-  (setq pt9 (list (- (car insert-pt) half-b) (- (cadr insert-pt) (- half-h half-tf))))
+  (setq pt9 (list (- (car insert-pt) half-b) (+ (- (cadr insert-pt) half-h) half-tf)))
   
   ;; 웹 좌측
-  (setq pt10 (list (- (car insert-pt) half-tw) (- (cadr insert-pt) (- half-h half-tf))))
-  (setq pt11 (list (- (car insert-pt) half-tw) (+ (cadr insert-pt) (- half-h half-tf))))
+  (setq pt10 (list (- (car insert-pt) half-tw) (+ (- (cadr insert-pt) half-h) half-tf)))
+  (setq pt11 (list (- (car insert-pt) half-tw) (- (+ (cadr insert-pt) half-h) half-tf)))
   
   ;; 상단 플랜지 좌측
-  (setq pt12 (list (- (car insert-pt) half-b) (+ (cadr insert-pt) (- half-h half-tf))))
+  (setq pt12 (list (- (car insert-pt) half-b) (- (+ (cadr insert-pt) half-h) half-tf)))
   
   ;; 폴리라인 생성
   (command "._PLINE"
@@ -786,7 +786,7 @@
 ;;; 토류판 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-timber-panel (pt1 pt2 width / mid-pt dx dy length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent)
+(defun create-timber-panel (pt1 pt2 width / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy)
   ;; pt1, pt2: H-Pile 중심점
   ;; width: 토류판 두께 (70mm)
   
@@ -809,24 +809,29 @@
   (setq panel-length (- length 50))
   
   ;; 토류판 4개 점 계산
+  ;; 방향에 수직인 벡터 계산
+  (setq perp-dx (- dy))
+  (setq perp-dy dx)
+  
+  ;; 토류판의 4개 꼭지점
   (setq panel-pt1 (list
-    (- (car mid-pt) (* dx (/ panel-length 2.0)) (* dy (/ width 2.0)))
-    (- (cadr mid-pt) (* dy (/ panel-length 2.0)) (- (* dx (/ width 2.0))))
+    (- (+ (car pt1) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
+    (- (+ (cadr pt1) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
   ))
   
   (setq panel-pt2 (list
-    (+ (car mid-pt) (* dx (/ panel-length 2.0)) (* dy (/ width 2.0)))
-    (+ (cadr mid-pt) (* dy (/ panel-length 2.0)) (- (* dx (/ width 2.0))))
+    (+ (- (car pt2) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
+    (+ (- (cadr pt2) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
   ))
   
   (setq panel-pt3 (list
-    (+ (car mid-pt) (* dx (/ panel-length 2.0)) (- (* dy (/ width 2.0))))
-    (+ (cadr mid-pt) (* dy (/ panel-length 2.0)) (* dx (/ width 2.0)))
+    (- (- (car pt2) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
+    (- (- (cadr pt2) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
   ))
   
   (setq panel-pt4 (list
-    (- (car mid-pt) (* dx (/ panel-length 2.0)) (- (* dy (/ width 2.0))))
-    (- (cadr mid-pt) (* dy (/ panel-length 2.0)) (* dx (/ width 2.0)))
+    (+ (+ (car pt1) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
+    (+ (+ (cadr pt1) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
   ))
   
   ;; 폴리라인 생성
@@ -842,10 +847,11 @@
     (progn
       (command "._CHPROP" pline-ent "" "_LA" "_토류판(timber)" "_C" "1" "")
       
-      ;; 해치 생성 (축척 30 적용)
+      ;; 해치 생성
       (command "._-BHATCH"
         "_P" "ANSI36"
-        "_S" 30
+        "30"
+        "0"
         "_SEL" pline-ent ""
         ""
       )
