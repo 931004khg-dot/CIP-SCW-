@@ -727,7 +727,7 @@
 ;;; H-Pile 단면 생성 (I자 형태)
 ;;; ----------------------------------------------------------------------
 
-(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent)
+(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf cx cy pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent)
   ;; insert-pt: 삽입 기준점 (중심)
   ;; h: 높이 (mm)
   ;; b: 폭 (mm)
@@ -741,30 +741,34 @@
   (setq half-tw (/ tw 2.0))
   (setq half-tf (/ tf 2.0))
   
+  ;; 중심 좌표 추출
+  (setq cx (car insert-pt))
+  (setq cy (cadr insert-pt))
+  
   ;; I형강 좌표 계산 (중심 기준, 12개 점)
   ;; 상단 플랜지 (좌측 상단부터 시계방향)
-  (setq pt1 (list (- (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
-  (setq pt2 (list (+ (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
-  (setq pt3 (list (+ (car insert-pt) half-b) (- (+ (cadr insert-pt) half-h) half-tf)))
+  (setq pt1  (list (- cx half-b) (+ cy half-h)))           ; 좌상단
+  (setq pt2  (list (+ cx half-b) (+ cy half-h)))           ; 우상단
+  (setq pt3  (list (+ cx half-b) (+ cy (- half-h half-tf)))) ; 우상단 안쪽
   
   ;; 웹 우측
-  (setq pt4 (list (+ (car insert-pt) half-tw) (- (+ (cadr insert-pt) half-h) half-tf)))
-  (setq pt5 (list (+ (car insert-pt) half-tw) (+ (- (cadr insert-pt) half-h) half-tf)))
+  (setq pt4  (list (+ cx half-tw) (+ cy (- half-h half-tf)))) ; 웹 우상단
+  (setq pt5  (list (+ cx half-tw) (- cy (- half-h half-tf)))) ; 웹 우하단
   
   ;; 하단 플랜지 우측
-  (setq pt6 (list (+ (car insert-pt) half-b) (+ (- (cadr insert-pt) half-h) half-tf)))
-  (setq pt7 (list (+ (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
-  (setq pt8 (list (- (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
+  (setq pt6  (list (+ cx half-b) (- cy (- half-h half-tf)))) ; 우하단 안쪽
+  (setq pt7  (list (+ cx half-b) (- cy half-h)))           ; 우하단
+  (setq pt8  (list (- cx half-b) (- cy half-h)))           ; 좌하단
   
   ;; 하단 플랜지 좌측
-  (setq pt9 (list (- (car insert-pt) half-b) (+ (- (cadr insert-pt) half-h) half-tf)))
+  (setq pt9  (list (- cx half-b) (- cy (- half-h half-tf)))) ; 좌하단 안쪽
   
   ;; 웹 좌측
-  (setq pt10 (list (- (car insert-pt) half-tw) (+ (- (cadr insert-pt) half-h) half-tf)))
-  (setq pt11 (list (- (car insert-pt) half-tw) (- (+ (cadr insert-pt) half-h) half-tf)))
+  (setq pt10 (list (- cx half-tw) (- cy (- half-h half-tf)))) ; 웹 좌하단
+  (setq pt11 (list (- cx half-tw) (+ cy (- half-h half-tf)))) ; 웹 좌상단
   
   ;; 상단 플랜지 좌측
-  (setq pt12 (list (- (car insert-pt) half-b) (- (+ (cadr insert-pt) half-h) half-tf)))
+  (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf)))) ; 좌상단 안쪽
   
   ;; 폴리라인 생성
   (command "._PLINE"
