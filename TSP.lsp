@@ -739,7 +739,7 @@
   (setq half-h (/ h 2.0))
   (setq half-b (/ b 2.0))
   (setq half-tw (/ tw 2.0))
-  (setq half-tf tf)
+  (setq half-tf (/ tf 2.0))
   
   ;; I형강 좌표 계산 (중심 기준, 12개 점)
   ;; 상단 플랜지 (좌측 상단부터 시계방향)
