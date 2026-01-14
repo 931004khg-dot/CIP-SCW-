@@ -820,29 +820,31 @@
   (debug-log (strcat "중심점: cx=" (rtos cx 2 2) " cy=" (rtos cy 2 2)))
   
   ;; I형강 좌표 계산 (중심 기준, 12개 점)
+  ;; 필렛을 위해 접합부 점들을 필렛 반지름만큼 안쪽으로 이동
+  
   ;; 상단 플랜지 (좌측 상단부터 시계방향)
   (setq pt1  (list (- cx half-b) (+ cy half-h)))           ; 좌상단
   (setq pt2  (list (+ cx half-b) (+ cy half-h)))           ; 우상단
-  (setq pt3  (list (+ cx half-b) (+ cy (- half-h half-tf)))) ; 우상단 안쪽
+  (setq pt3  (list (+ cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 우상단 안쪽 (필렛 고려)
   
   ;; 웹 우측
-  (setq pt4  (list (+ cx half-tw) (+ cy (- half-h half-tf)))) ; 웹 우상단
-  (setq pt5  (list (+ cx half-tw) (- cy (- half-h half-tf)))) ; 웹 우하단
+  (setq pt4  (list (+ cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 웹 우상단 (필렛 고려)
+  (setq pt5  (list (+ cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 웹 우하단 (필렛 고려)
   
   ;; 하단 플랜지 우측
-  (setq pt6  (list (+ cx half-b) (- cy (- half-h half-tf)))) ; 우하단 안쪽
+  (setq pt6  (list (+ cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 우하단 안쪽 (필렛 고려)
   (setq pt7  (list (+ cx half-b) (- cy half-h)))           ; 우하단
   (setq pt8  (list (- cx half-b) (- cy half-h)))           ; 좌하단
   
   ;; 하단 플랜지 좌측
-  (setq pt9  (list (- cx half-b) (- cy (- half-h half-tf)))) ; 좌하단 안쪽
+  (setq pt9  (list (- cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 좌하단 안쪽 (필렛 고려)
   
   ;; 웹 좌측
-  (setq pt10 (list (- cx half-tw) (- cy (- half-h half-tf)))) ; 웹 좌하단
-  (setq pt11 (list (- cx half-tw) (+ cy (- half-h half-tf)))) ; 웹 좌상단
+  (setq pt10 (list (- cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 웹 좌하단 (필렛 고려)
+  (setq pt11 (list (- cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 웹 좌상단 (필렛 고려)
   
   ;; 상단 플랜지 좌측
-  (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf)))) ; 좌상단 안쪽
+  (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 좌상단 안쪽 (필렛 고려)
   
   (debug-log (strcat "12개 점 계산 완료"))
   (debug-log (strcat "필렛 반지름: " (rtos fillet-r 2 2) "mm"))
