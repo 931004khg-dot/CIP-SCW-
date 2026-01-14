@@ -24,9 +24,20 @@
 ;;; DCL 파일 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-tsp-dcl (/ dcl-file dcl-path)
-  ;; DCL 파일 경로 설정
-  (setq dcl-path (strcat (getvar "TEMPPREFIX") "tsp.dcl"))
+(defun create-tsp-dcl (/ dcl-file dcl-path lisp-path)
+  ;; 현재 LISP 파일 경로 가져오기
+  (setq lisp-path (findfile "TSP.lsp"))
+  
+  (if lisp-path
+    (progn
+      ;; LISP 파일이 있는 디렉토리에 DCL 파일 생성
+      (setq dcl-path (strcat (vl-filename-directory lisp-path) "\\tsp.dcl"))
+    )
+    (progn
+      ;; LISP 파일을 찾을 수 없으면 TEMP 디렉토리 사용
+      (setq dcl-path (strcat (getvar "TEMPPREFIX") "tsp.dcl"))
+    )
+  )
   
   ;; DCL 파일 생성
   (setq dcl-file (open dcl-path "w"))
@@ -211,7 +222,6 @@
       (write-line "}" dcl-file)
       
       (close dcl-file)
-      (princ (strcat "\nDCL 파일 생성: " dcl-path))
       dcl-path
     )
     (progn
@@ -341,8 +351,8 @@
 ;;; H-Pile Dialog 콜백 함수
 ;;; ----------------------------------------------------------------------
 
-(defun hpile-dialog-callback (/ dcl-id result hpile-idx wale-idx)
-  (setq dcl-id (load_dialog (getvar "TEMPPREFIX") "tsp.dcl"))
+(defun hpile-dialog-callback (dcl-path / dcl-id result hpile-idx wale-idx)
+  (setq dcl-id (load_dialog dcl-path))
   
   (if (not (new_dialog "tsp_hpile" dcl-id))
     (progn
@@ -484,8 +494,8 @@
 ;;; 메인 Dialog 콜백 함수
 ;;; ----------------------------------------------------------------------
 
-(defun main-dialog-callback (/ dcl-id result)
-  (setq dcl-id (load_dialog (getvar "TEMPPREFIX") "tsp.dcl"))
+(defun main-dialog-callback (dcl-path / dcl-id result)
+  (setq dcl-id (load_dialog dcl-path))
   
   (if (not (new_dialog "tsp_main" dcl-id))
     (progn
@@ -527,7 +537,7 @@
 ;;; TSP 메인 함수
 ;;; ----------------------------------------------------------------------
 
-(defun C:TSP (/ dcl-path main-result hpile-result boundary-ent)
+(defun C:TSP (/ dcl-path dcl-id main-result hpile-result boundary-ent)
   (princ "\n========================================")
   (princ "\nTSP - Temporary Structure Plan")
   (princ "\n========================================\n")
@@ -555,7 +565,7 @@
   (unload_dialog dcl-id)
   
   ;; 메인 Dialog 표시
-  (setq main-result (main-dialog-callback))
+  (setq main-result (main-dialog-callback dcl-path))
   
   (cond
     ;; H-Pile + 토류판 선택
@@ -563,7 +573,7 @@
      (princ "\n>>> H-Pile + 토류판 공법 선택\n")
      
      ;; H-Pile 설정 Dialog 표시
-     (setq hpile-result (hpile-dialog-callback))
+     (setq hpile-result (hpile-dialog-callback dcl-path))
      
      (if (= hpile-result 1)
        (progn
@@ -607,8 +617,5 @@
 ;;; 시작 메시지
 ;;; ----------------------------------------------------------------------
 
-(princ "\n========================================")
-(princ "\nTSP - Temporary Structure Plan 로드됨")
-(princ "\n명령어: TSP")
-(princ "\n========================================")
+(princ "\nTSP.lsp loaded. Command: TSP")
 (princ)
