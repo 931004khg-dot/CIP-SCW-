@@ -323,21 +323,32 @@
   (setq obj1 (entlast))
   (command "._CHPROP" obj1 "" "_LA" "_띠장(wale)" "_C" "3" "")
   
-  ;; 경계선의 내부 점 찾기 (중심점 방향으로 옵셋하기 위함)
+  ;; 경계선의 내부 점 찾기 (바운딩 박스 중심 사용)
   (setq ent-data (entget boundary-ent))
   (setq ent-type (cdr (assoc 0 ent-data)))
   
-  ;; LWPOLYLINE인 경우 첫 번째 정점 가져오기
-  (if (= ent-type "LWPOLYLINE")
+  ;; 바운딩 박스를 사용하여 중심점 계산
+  (command "._ZOOM" "_E" boundary-ent "")
+  (setq bbox (vl-catch-all-apply 'vla-getboundingbox 
+    (list (vlax-ename->vla-object boundary-ent) 
+          'minpt 'maxpt)))
+  
+  (if (not (vl-catch-all-error-p bbox))
     (progn
-      (setq first-vertex (cdr (assoc 10 ent-data)))
-      ;; 내부 방향 점 (안쪽으로 조금 이동)
-      (setq inside-pt (list (- (car first-vertex) 1) (- (cadr first-vertex) 1)))
+      ;; 바운딩 박스 중심점 계산
+      (setq minpt (vlax-safearray->list minpt))
+      (setq maxpt (vlax-safearray->list maxpt))
+      (setq inside-pt (list 
+        (/ (+ (car minpt) (car maxpt)) 2.0)
+        (/ (+ (cadr minpt) (cadr maxpt)) 2.0)
+      ))
+      (princ (strcat "\n바운딩 박스 중심: (" (rtos (car inside-pt) 2 2) ", " (rtos (cadr inside-pt) 2 2) ")"))
     )
-    ;; LINE인 경우
+    ;; 바운딩 박스를 가져올 수 없는 경우, 첫 정점 기준으로 계산
     (progn
       (setq first-vertex (cdr (assoc 10 ent-data)))
-      (setq inside-pt (list (- (car first-vertex) 1) (- (cadr first-vertex) 1)))
+      (setq inside-pt (list (+ (car first-vertex) 100) (+ (cadr first-vertex) 100)))
+      (princ "\n[Warning] 바운딩 박스 계산 실패, 대체 방법 사용")
     )
   )
   
@@ -895,32 +906,31 @@
   (setq panel-length (- length 50))
   
   ;; 토류판 4개 점 계산
-  ;; 방향에 수직인 벡터 계산 (위쪽 방향)
-  (setq perp-dx (- dy))
-  (setq perp-dy dx)
+  ;; 토류판 수평 길이 = C.T.C - 50 (양쪽 25mm씩 여유)
+  ;; 토류판 수직 높이 = 1000mm
   
   ;; 토류판의 4개 꼭지점 (직사각형)
-  ;; 하단 왼쪽: pt1에서 25mm 떨어진 점 (하단 플랜지 상단에 붙음)
+  ;; 하단 왼쪽: 왼쪽 H-Pile에서 25mm 오른쪽
   (setq panel-pt1 (list
-    (+ (car pt1) (* dx 25.0) (* perp-dx (/ width 2.0)))
-    flange-top-y  ; 하단 플랜지 상단에 붙음
+    (+ (car pt1) 25.0)
+    flange-top-y
   ))
   
-  ;; 하단 오른쪽: pt2에서 25mm 떨어진 점 (하단 플랜지 상단에 붙음)
+  ;; 하단 오른쪽: 오른쪽 H-Pile에서 25mm 왼쪽
   (setq panel-pt2 (list
-    (- (car pt2) (* dx 25.0) (* perp-dx (/ width 2.0)))
-    flange-top-y  ; 하단 플랜지 상단에 붙음
+    (- (car pt2) 25.0)
+    flange-top-y
   ))
   
-  ;; 상단 오른쪽: 하단에서 panel-height만큼 위로
+  ;; 상단 오른쪽
   (setq panel-pt3 (list
-    (+ (- (car pt2) (* dx 25.0)) (* perp-dx (/ width 2.0)))
+    (- (car pt2) 25.0)
     (+ flange-top-y panel-height)
   ))
   
-  ;; 상단 왼쪽: 하단에서 panel-height만큼 위로
+  ;; 상단 왼쪽
   (setq panel-pt4 (list
-    (- (+ (car pt1) (* dx 25.0)) (* perp-dx (/ width 2.0)))
+    (+ (car pt1) 25.0)
     (+ flange-top-y panel-height)
   ))
   
