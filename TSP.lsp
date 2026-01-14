@@ -590,6 +590,10 @@
              ;; 띠장 옵셋 생성
              (create-wale-offsets boundary-ent *tsp-wale-spec*)
              
+             ;; H-Pile 세트 생성 (테스트용: 0,0 위치에 1세트)
+             (princ "\n\n>>> H-Pile 세트 생성 시작...")
+             (create-hpile-set '(0 0) *tsp-hpile-spec* *tsp-ctc*)
+             
              (princ "\n========================================")
              (princ "\n작업 완료!")
              (princ "\n========================================\n")
@@ -608,6 +612,189 @@
   )
   
   (princ)
+)
+
+;;; ----------------------------------------------------------------------
+;;; H-Pile 단면 생성 (I자 형태)
+;;; ----------------------------------------------------------------------
+
+(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent)
+  ;; insert-pt: 삽입 기준점 (중심)
+  ;; h: 높이 (mm)
+  ;; b: 폭 (mm)
+  ;; tw: 웹 두께 (mm)
+  ;; tf: 플랜지 두께 (mm)
+  ;; layer-name: 레이어명
+  
+  ;; 반값 계산
+  (setq half-h (/ h 2.0))
+  (setq half-b (/ b 2.0))
+  (setq half-tw (/ tw 2.0))
+  (setq half-tf tf)
+  
+  ;; I형강 좌표 계산 (중심 기준, 12개 점)
+  ;; 상단 플랜지 (좌측 상단부터 시계방향)
+  (setq pt1 (list (- (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
+  (setq pt2 (list (+ (car insert-pt) half-b) (+ (cadr insert-pt) half-h)))
+  (setq pt3 (list (+ (car insert-pt) half-b) (+ (cadr insert-pt) (- half-h half-tf))))
+  
+  ;; 웹 우측
+  (setq pt4 (list (+ (car insert-pt) half-tw) (+ (cadr insert-pt) (- half-h half-tf))))
+  (setq pt5 (list (+ (car insert-pt) half-tw) (- (cadr insert-pt) (- half-h half-tf))))
+  
+  ;; 하단 플랜지 우측
+  (setq pt6 (list (+ (car insert-pt) half-b) (- (cadr insert-pt) (- half-h half-tf))))
+  (setq pt7 (list (+ (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
+  (setq pt8 (list (- (car insert-pt) half-b) (- (cadr insert-pt) half-h)))
+  
+  ;; 하단 플랜지 좌측
+  (setq pt9 (list (- (car insert-pt) half-b) (- (cadr insert-pt) (- half-h half-tf))))
+  
+  ;; 웹 좌측
+  (setq pt10 (list (- (car insert-pt) half-tw) (- (cadr insert-pt) (- half-h half-tf))))
+  (setq pt11 (list (- (car insert-pt) half-tw) (+ (cadr insert-pt) (- half-h half-tf))))
+  
+  ;; 상단 플랜지 좌측
+  (setq pt12 (list (- (car insert-pt) half-b) (+ (cadr insert-pt) (- half-h half-tf))))
+  
+  ;; 폴리라인 생성
+  (command "._PLINE"
+    pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12
+    "_C"
+  )
+  
+  (setq pline-ent (entlast))
+  
+  ;; 레이어 및 색상 변경
+  (if pline-ent
+    (command "._CHPROP" pline-ent "" "_LA" layer-name "_C" "3" "")
+  )
+  
+  pline-ent
+)
+
+;;; ----------------------------------------------------------------------
+;;; 토류판 생성
+;;; ----------------------------------------------------------------------
+
+(defun create-timber-panel (pt1 pt2 width / mid-pt dx dy length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent)
+  ;; pt1, pt2: H-Pile 중심점
+  ;; width: 토류판 두께 (70mm)
+  
+  ;; 두 점 사이의 중점 계산
+  (setq mid-pt (list
+    (/ (+ (car pt1) (car pt2)) 2.0)
+    (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+  ))
+  
+  ;; 방향 벡터
+  (setq dx (- (car pt2) (car pt1)))
+  (setq dy (- (cadr pt2) (cadr pt1)))
+  (setq length (sqrt (+ (* dx dx) (* dy dy))))
+  
+  ;; 정규화
+  (setq dx (/ dx length))
+  (setq dy (/ dy length))
+  
+  ;; 토류판 길이 = C.T.C - 50 (양쪽 25mm씩 여유)
+  (setq panel-length (- length 50))
+  
+  ;; 토류판 4개 점 계산
+  (setq panel-pt1 (list
+    (- (car mid-pt) (* dx (/ panel-length 2.0)) (* dy (/ width 2.0)))
+    (- (cadr mid-pt) (* dy (/ panel-length 2.0)) (- (* dx (/ width 2.0))))
+  ))
+  
+  (setq panel-pt2 (list
+    (+ (car mid-pt) (* dx (/ panel-length 2.0)) (* dy (/ width 2.0)))
+    (+ (cadr mid-pt) (* dy (/ panel-length 2.0)) (- (* dx (/ width 2.0))))
+  ))
+  
+  (setq panel-pt3 (list
+    (+ (car mid-pt) (* dx (/ panel-length 2.0)) (- (* dy (/ width 2.0))))
+    (+ (cadr mid-pt) (* dy (/ panel-length 2.0)) (* dx (/ width 2.0)))
+  ))
+  
+  (setq panel-pt4 (list
+    (- (car mid-pt) (* dx (/ panel-length 2.0)) (- (* dy (/ width 2.0))))
+    (- (cadr mid-pt) (* dy (/ panel-length 2.0)) (* dx (/ width 2.0)))
+  ))
+  
+  ;; 폴리라인 생성
+  (command "._PLINE"
+    panel-pt1 panel-pt2 panel-pt3 panel-pt4
+    "_C"
+  )
+  
+  (setq pline-ent (entlast))
+  
+  ;; 레이어 및 색상 변경
+  (if pline-ent
+    (progn
+      (command "._CHPROP" pline-ent "" "_LA" "_토류판(timber)" "_C" "1" "")
+      
+      ;; 해치 생성
+      (command "._BHATCH"
+        "_P" "ANSI36"
+        "_S" "30"
+        "_AN" "0"
+        "_SEL" pline-ent ""
+        ""
+      )
+    )
+  )
+  
+  pline-ent
+)
+
+;;; ----------------------------------------------------------------------
+;;; H-Pile 세트 생성 (H-Pile 2개 + 토류판 1개)
+;;; ----------------------------------------------------------------------
+
+(defun create-hpile-set (pt1 hpile-spec ctc / h b tw tf layer-name pt2 hpile1 hpile2 timber)
+  ;; pt1: 첫 번째 H-Pile 중심점
+  ;; hpile-spec: H-Pile 규격 문자열
+  ;; ctc: C.T.C 거리 (m → mm 변환 필요)
+  
+  ;; 규격 파싱
+  (if (= hpile-spec "User-defined")
+    (setq hpile-values *tsp-hpile-custom*)
+    (setq hpile-values (parse-h-spec hpile-spec))
+  )
+  
+  (setq h (nth 0 hpile-values))
+  (setq b (nth 1 hpile-values))
+  (setq tw (nth 2 hpile-values))
+  (setq tf (nth 3 hpile-values))
+  
+  ;; 레이어명 생성
+  (setq layer-name (strcat "_" hpile-spec))
+  
+  ;; 레이어 생성
+  (create-layer-if-not-exists layer-name "3")
+  (create-layer-if-not-exists "_토류판(timber)" "1")
+  
+  (princ (strcat "\nH-Pile 규격: H=" (rtos h 2 0) " B=" (rtos b 2 0) " tw=" (rtos tw 2 0) " tf=" (rtos tf 2 0)))
+  (princ (strcat "\nC.T.C: " (rtos (* ctc 1000) 2 0) "mm"))
+  
+  ;; 두 번째 H-Pile 중심점 계산 (수평 방향으로 C.T.C 거리)
+  (setq pt2 (list (+ (car pt1) (* ctc 1000)) (cadr pt1)))
+  
+  ;; 첫 번째 H-Pile 생성
+  (princ "\n첫 번째 H-Pile 생성...")
+  (setq hpile1 (create-hpile-section pt1 h b tw tf layer-name))
+  
+  ;; 두 번째 H-Pile 생성
+  (princ "\n두 번째 H-Pile 생성...")
+  (setq hpile2 (create-hpile-section pt2 h b tw tf layer-name))
+  
+  ;; 토류판 생성
+  (princ "\n토류판 생성...")
+  (setq timber (create-timber-panel pt1 pt2 70))
+  
+  (princ "\nH-Pile 세트 생성 완료!")
+  
+  (list hpile1 hpile2 timber)
 )
 
 ;;; ----------------------------------------------------------------------
