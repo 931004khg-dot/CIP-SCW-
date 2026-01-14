@@ -257,33 +257,45 @@
 ;;; H형강 규격 파싱
 ;;; ----------------------------------------------------------------------
 
-(defun parse-h-spec (spec-str / parts h b tw tf)
-  ;; "H 300×300×10/15" -> (300 300 10 15)
-  (if (wcmatch spec-str "H *×*×*/*")
+(defun parse-h-spec (spec-str / temp-str h b tw tf pos1 pos2 pos3 pos4)
+  ;; "H 298×201×9/14" -> (298 201 9 14)
+  (if (and spec-str (wcmatch spec-str "H *"))
     (progn
       ;; "H " 제거
-      (setq spec-str (substr spec-str 3))
+      (setq temp-str (substr spec-str 3))
       
-      ;; "×"와 "/"로 분할
-      (setq parts '())
-      (setq pos 1)
-      
-      ;; 간단한 파싱 (숫자 추출)
-      (setq h (atoi spec-str))
-      
-      (setq pos (vl-string-search "×" spec-str))
-      (setq spec-str (substr spec-str (+ pos 2)))
-      (setq b (atoi spec-str))
-      
-      (setq pos (vl-string-search "×" spec-str))
-      (setq spec-str (substr spec-str (+ pos 2)))
-      (setq tw (atoi spec-str))
-      
-      (setq pos (vl-string-search "/" spec-str))
-      (setq spec-str (substr spec-str (+ pos 2)))
-      (setq tf (atoi spec-str))
-      
-      (list h b tw tf)
+      ;; 첫 번째 × 찾기
+      (setq pos1 (vl-string-search "×" temp-str))
+      (if pos1
+        (progn
+          (setq h (atoi temp-str))
+          (setq temp-str (substr temp-str (+ pos1 4)))  ; UTF-8 × 문자는 3바이트
+          
+          ;; 두 번째 × 찾기
+          (setq pos2 (vl-string-search "×" temp-str))
+          (if pos2
+            (progn
+              (setq b (atoi temp-str))
+              (setq temp-str (substr temp-str (+ pos2 4)))
+              
+              ;; / 찾기
+              (setq pos3 (vl-string-search "/" temp-str))
+              (if pos3
+                (progn
+                  (setq tw (atoi temp-str))
+                  (setq temp-str (substr temp-str (+ pos3 2)))
+                  (setq tf (atoi temp-str))
+                  
+                  (list h b tw tf)
+                )
+                nil
+              )
+            )
+            nil
+          )
+        )
+        nil
+      )
     )
     nil
   )
@@ -845,9 +857,20 @@
   ;; ctc: C.T.C 거리 (m → mm 변환 필요)
   
   ;; 규격 파싱
+  (princ (strcat "\n[DEBUG] H-Pile 규격 문자열: \"" hpile-spec "\""))
+  
   (if (= hpile-spec "User-defined")
     (setq hpile-values *tsp-hpile-custom*)
     (setq hpile-values (parse-h-spec hpile-spec))
+  )
+  
+  (princ (strcat "\n[DEBUG] 파싱 결과: " (if hpile-values (vl-princ-to-string hpile-values) "nil")))
+  
+  (if (not hpile-values)
+    (progn
+      (princ "\n[ERROR] 규격 파싱 실패!")
+      (exit)
+    )
   )
   
   (setq h (nth 0 hpile-values))
@@ -855,8 +878,12 @@
   (setq tw (nth 2 hpile-values))
   (setq tf (nth 3 hpile-values))
   
-  ;; 레이어명 생성 (× 기호를 x로 변경하여 유효한 레이어명 생성)
-  (setq layer-name (strcat "_H-Pile_" (rtos h 2 0) "x" (rtos b 2 0) "x" (rtos tw 2 0) "/" (rtos tf 2 0)))
+  ;; 레이어명 생성 (간단한 형식으로 변경)
+  (setq layer-name (strcat "_H-Pile_" 
+                           (itoa h) "x" 
+                           (itoa b) "x" 
+                           (itoa tw) "-" 
+                           (itoa tf)))
   
   ;; 레이어 생성
   (create-layer-if-not-exists layer-name "3")
