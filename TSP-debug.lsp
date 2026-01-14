@@ -794,7 +794,7 @@
 )
 
 ;; create-hpile-section 재정의
-(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf cx cy pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent fillet-r)
+(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf cx cy pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pt13 pt14 pt15 pt16 pt17 pt18 pt19 pt20 pline-ent fillet-r)
   ;; insert-pt: 삽입 기준점 (중심)
   ;; h: 높이 (mm)
   ;; b: 폭 (mm)
@@ -819,42 +819,46 @@
   
   (debug-log (strcat "중심점: cx=" (rtos cx 2 2) " cy=" (rtos cy 2 2)))
   
-  ;; I형강 좌표 계산 (중심 기준, 12개 점)
-  ;; 필렛을 위해 접합부 점들을 필렛 반지름만큼 안쪽으로 이동
+  ;; I형강 좌표 계산 (중심 기준, 16개 점 - 반시계방향 CCW)
+  ;; 16개 점 = 플랜지 외부 8개 + 웹-플랜지 모서리 8개 (필렛 시작/끝)
   
-  ;; 상단 플랜지 (좌측 상단부터 시계방향)
-  (setq pt1  (list (- cx half-b) (+ cy half-h)))           ; 좌상단
-  (setq pt2  (list (+ cx half-b) (+ cy half-h)))           ; 우상단
-  (setq pt3  (list (+ cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 우상단 안쪽 (필렛 고려)
+  ;; 상단 플랜지 - 우측 (반시계방향 시작)
+  (setq pt1  (list (+ cx half-b) (+ cy half-h)))                      ; 1. 우상단 외부 모서리
+  (setq pt2  (list (+ cx half-b) (+ cy (- half-h half-tf))))          ; 2. 우측 플랜지 하단
+  (setq pt3  (list (+ cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 3. 필렛 시작점 (우상)
   
-  ;; 웹 우측
-  (setq pt4  (list (+ cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 웹 우상단 (필렛 고려)
-  (setq pt5  (list (+ cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 웹 우하단 (필렛 고려)
+  ;; 우측 필렛 + 웹
+  (setq pt4  (list (+ cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 4. 필렛 끝점 (우상)
+  (setq pt5  (list (+ cx half-tw) (+ cy (- half-h half-tf))))          ; 5. 웹 우상단
+  (setq pt6  (list (+ cx half-tw) (- cy (- half-h half-tf))))          ; 6. 웹 우하단
+  (setq pt7  (list (+ cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 7. 필렛 시작점 (우하)
   
-  ;; 하단 플랜지 우측
-  (setq pt6  (list (+ cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 우하단 안쪽 (필렛 고려)
-  (setq pt7  (list (+ cx half-b) (- cy half-h)))           ; 우하단
-  (setq pt8  (list (- cx half-b) (- cy half-h)))           ; 좌하단
+  ;; 하단 플랜지 - 우측
+  (setq pt8  (list (+ cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 8. 필렛 끝점 (우하)
+  (setq pt9  (list (+ cx half-b) (- cy (- half-h half-tf))))          ; 9. 우측 플랜지 상단
+  (setq pt10 (list (+ cx half-b) (- cy half-h)))                      ; 10. 우하단 외부 모서리
   
-  ;; 하단 플랜지 좌측
-  (setq pt9  (list (- cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 좌하단 안쪽 (필렛 고려)
+  ;; 하단 플랜지 - 좌측
+  (setq pt11 (list (- cx half-b) (- cy half-h)))                      ; 11. 좌하단 외부 모서리
+  (setq pt12 (list (- cx half-b) (- cy (- half-h half-tf))))          ; 12. 좌측 플랜지 상단
+  (setq pt13 (list (- cx half-b) (- cy (- half-h half-tf fillet-r)))) ; 13. 필렛 시작점 (좌하)
   
-  ;; 웹 좌측
-  (setq pt10 (list (- cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 웹 좌하단 (필렛 고려)
-  (setq pt11 (list (- cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 웹 좌상단 (필렛 고려)
+  ;; 좌측 필렛 + 웹
+  (setq pt14 (list (- cx half-tw fillet-r) (- cy (- half-h half-tf)))) ; 14. 필렛 끝점 (좌하)
+  (setq pt15 (list (- cx half-tw) (- cy (- half-h half-tf))))          ; 15. 웹 좌하단
+  (setq pt16 (list (- cx half-tw) (+ cy (- half-h half-tf))))          ; 16. 웹 좌상단
+  (setq pt17 (list (- cx half-tw fillet-r) (+ cy (- half-h half-tf)))) ; 17. 필렛 시작점 (좌상)
   
-  ;; 상단 플랜지 좌측
-  (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 좌상단 안쪽 (필렛 고려)
+  ;; 상단 플랜지 - 좌측
+  (setq pt18 (list (- cx half-b) (+ cy (- half-h half-tf fillet-r)))) ; 18. 필렛 끝점 (좌상)
+  (setq pt19 (list (- cx half-b) (+ cy (- half-h half-tf))))          ; 19. 좌측 플랜지 하단
+  (setq pt20 (list (- cx half-b) (+ cy half-h)))                      ; 20. 좌상단 외부 모서리
   
-  (debug-log (strcat "12개 점 계산 완료"))
+  (debug-log (strcat "20개 점 계산 완료"))
   (debug-log (strcat "필렛 반지름: " (rtos fillet-r 2 2) "mm"))
   
   ;; 폴리라인 생성 (entmake 사용, 필렛 포함)
-  ;; 필렛은 웹-플랜지 접합부 4곳에 적용
-  ;; Junction 1: pt3→pt4 (우상단 플랜지→웹)
-  ;; Junction 2: pt5→pt6 (웹→우하단 플랜지)
-  ;; Junction 3: pt9→pt10 (좌하단 플랜지→웹)
-  ;; Junction 4: pt11→pt12 (웹→좌상단 플랜지)
+  ;; 필렛은 웹-플랜지 모서리 4곳에만 적용 (bulge = 0.4142)
   (entmake
     (list
       '(0 . "LWPOLYLINE")
@@ -862,24 +866,32 @@
       '(100 . "AcDbPolyline")
       (cons 8 layer-name)
       (cons 62 3)  ; 색상: 초록(3)
-      '(90 . 12)   ; 정점 개수
+      '(90 . 20)   ; 정점 개수: 20개
       '(70 . 1)    ; 닫힘 플래그
-      (cons 10 pt1)   ; 좌상단 외부
-      (cons 10 pt2)   ; 우상단 외부
-      (cons 10 pt3)   ; 우상단 안쪽
-      (cons 42 0.4142135623730951)  ; 필렛 1: pt3→pt4 (우상단 접합부)
-      (cons 10 pt4)   ; 웹 우상단
-      (cons 10 pt5)   ; 웹 우하단
-      (cons 42 0.4142135623730951)  ; 필렛 2: pt5→pt6 (우하단 접합부)
-      (cons 10 pt6)   ; 우하단 안쪽
-      (cons 10 pt7)   ; 우하단 외부
-      (cons 10 pt8)   ; 좌하단 외부
-      (cons 10 pt9)   ; 좌하단 안쪽
-      (cons 42 0.4142135623730951)  ; 필렛 3: pt9→pt10 (좌하단 접합부)
-      (cons 10 pt10)  ; 웹 좌하단
-      (cons 10 pt11)  ; 웹 좌상단
-      (cons 42 0.4142135623730951)  ; 필렛 4: pt11→pt12 (좌상단 접합부)
-      (cons 10 pt12)  ; 좌상단 안쪽
+      (cons 10 pt1)   ; 1. 우상단 외부
+      (cons 10 pt2)   ; 2. 우측 플랜지 하단
+      (cons 10 pt3)   ; 3. 필렛 시작 (우상)
+      (cons 42 0.4142135623730951)  ; 필렛 1: pt3→pt4
+      (cons 10 pt4)   ; 4. 필렛 끝 (우상)
+      (cons 10 pt5)   ; 5. 웹 우상단
+      (cons 10 pt6)   ; 6. 웹 우하단
+      (cons 10 pt7)   ; 7. 필렛 시작 (우하)
+      (cons 42 0.4142135623730951)  ; 필렛 2: pt7→pt8
+      (cons 10 pt8)   ; 8. 필렛 끝 (우하)
+      (cons 10 pt9)   ; 9. 우측 플랜지 상단
+      (cons 10 pt10)  ; 10. 우하단 외부
+      (cons 10 pt11)  ; 11. 좌하단 외부
+      (cons 10 pt12)  ; 12. 좌측 플랜지 상단
+      (cons 10 pt13)  ; 13. 필렛 시작 (좌하)
+      (cons 42 0.4142135623730951)  ; 필렛 3: pt13→pt14
+      (cons 10 pt14)  ; 14. 필렛 끝 (좌하)
+      (cons 10 pt15)  ; 15. 웹 좌하단
+      (cons 10 pt16)  ; 16. 웹 좌상단
+      (cons 10 pt17)  ; 17. 필렛 시작 (좌상)
+      (cons 42 0.4142135623730951)  ; 필렛 4: pt17→pt18
+      (cons 10 pt18)  ; 18. 필렛 끝 (좌상)
+      (cons 10 pt19)  ; 19. 좌측 플랜지 하단
+      (cons 10 pt20)  ; 20. 좌상단 외부
     )
   )
   
