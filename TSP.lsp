@@ -727,7 +727,7 @@
 ;;; H-Pile 단면 생성 (I자 형태)
 ;;; ----------------------------------------------------------------------
 
-(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf cx cy pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent)
+(defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf cx cy pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent fillet-r)
   ;; insert-pt: 삽입 기준점 (중심)
   ;; h: 높이 (mm)
   ;; b: 폭 (mm)
@@ -740,6 +740,7 @@
   (setq half-b (/ b 2.0))
   (setq half-tw (/ tw 2.0))
   (setq half-tf (/ tf 2.0))
+  (setq fillet-r (* tw 2.0))  ; 필렛 반지름 = 웹 두께 × 2
   
   ;; 중심 좌표 추출
   (setq cx (car insert-pt))
@@ -770,7 +771,7 @@
   ;; 상단 플랜지 좌측
   (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf)))) ; 좌상단 안쪽
   
-  ;; 폴리라인 생성 (entmake 사용)
+  ;; 폴리라인 생성 (entmake 사용, 필렛 포함)
   (entmake
     (list
       '(0 . "LWPOLYLINE")
@@ -781,15 +782,19 @@
       '(90 . 12)   ; 정점 개수
       '(70 . 1)    ; 닫힘 플래그
       (cons 10 pt1)
+      (cons 42 0.4142135623730951)  ; 필렛: 90도 호 (bulge = tan(45°))
       (cons 10 pt2)
       (cons 10 pt3)
       (cons 10 pt4)
+      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
       (cons 10 pt5)
       (cons 10 pt6)
       (cons 10 pt7)
+      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
       (cons 10 pt8)
       (cons 10 pt9)
       (cons 10 pt10)
+      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
       (cons 10 pt11)
       (cons 10 pt12)
     )
@@ -830,25 +835,29 @@
   (setq perp-dx (- dy))
   (setq perp-dy dx)
   
-  ;; 토류판의 4개 꼭지점
+  ;; 토류판의 4개 꼭지점 (직사각형)
+  ;; pt1에서 25mm 떨어진 점 + 수직 방향으로 width/2
   (setq panel-pt1 (list
-    (- (+ (car pt1) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
-    (- (+ (cadr pt1) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
+    (+ (car pt1) (* dx 25.0) (* perp-dx (/ width 2.0)))
+    (+ (cadr pt1) (* dy 25.0) (* perp-dy (/ width 2.0)))
   ))
   
+  ;; pt2에서 25mm 떨어진 점 + 수직 방향으로 width/2
   (setq panel-pt2 (list
-    (+ (- (car pt2) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
-    (+ (- (cadr pt2) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
+    (- (car pt2) (* dx 25.0) (* perp-dx (/ width 2.0)))
+    (- (cadr pt2) (* dy 25.0) (* perp-dy (/ width 2.0)))
   ))
   
+  ;; pt2에서 25mm 떨어진 점 - 수직 방향으로 width/2
   (setq panel-pt3 (list
-    (- (- (car pt2) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
-    (- (- (cadr pt2) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
+    (+ (- (car pt2) (* dx 25.0)) (* perp-dx (/ width 2.0)))
+    (+ (- (cadr pt2) (* dy 25.0)) (* perp-dy (/ width 2.0)))
   ))
   
+  ;; pt1에서 25mm 떨어진 점 - 수직 방향으로 width/2
   (setq panel-pt4 (list
-    (+ (+ (car pt1) (* dx (/ 25.0 1))) (* perp-dx (/ width 2.0)))
-    (+ (+ (cadr pt1) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
+    (- (+ (car pt1) (* dx 25.0)) (* perp-dx (/ width 2.0)))
+    (- (+ (cadr pt1) (* dy 25.0)) (* perp-dy (/ width 2.0)))
   ))
   
   ;; 폴리라인 생성 (entmake 사용)
