@@ -772,6 +772,11 @@
   (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf)))) ; 좌상단 안쪽
   
   ;; 폴리라인 생성 (entmake 사용, 필렛 포함)
+  ;; 필렛은 웹-플랜지 접합부 4곳에 적용
+  ;; Junction 1: pt3→pt4 (우상단 플랜지→웹)
+  ;; Junction 2: pt5→pt6 (웹→우하단 플랜지)
+  ;; Junction 3: pt9→pt10 (좌하단 플랜지→웹)
+  ;; Junction 4: pt11→pt12 (웹→좌상단 플랜지)
   (entmake
     (list
       '(0 . "LWPOLYLINE")
@@ -781,22 +786,22 @@
       (cons 62 3)  ; 색상: 초록(3)
       '(90 . 12)   ; 정점 개수
       '(70 . 1)    ; 닫힘 플래그
-      (cons 10 pt1)
-      (cons 42 0.4142135623730951)  ; 필렛: 90도 호 (bulge = tan(45°))
-      (cons 10 pt2)
-      (cons 10 pt3)
-      (cons 10 pt4)
-      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
-      (cons 10 pt5)
-      (cons 10 pt6)
-      (cons 10 pt7)
-      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
-      (cons 10 pt8)
-      (cons 10 pt9)
-      (cons 10 pt10)
-      (cons 42 0.4142135623730951)  ; 필렛: 90도 호
-      (cons 10 pt11)
-      (cons 10 pt12)
+      (cons 10 pt1)   ; 좌상단 외부
+      (cons 10 pt2)   ; 우상단 외부
+      (cons 10 pt3)   ; 우상단 안쪽
+      (cons 42 0.4142135623730951)  ; 필렛 1: pt3→pt4 (우상단 접합부)
+      (cons 10 pt4)   ; 웹 우상단
+      (cons 10 pt5)   ; 웹 우하단
+      (cons 42 0.4142135623730951)  ; 필렛 2: pt5→pt6 (우하단 접합부)
+      (cons 10 pt6)   ; 우하단 안쪽
+      (cons 10 pt7)   ; 우하단 외부
+      (cons 10 pt8)   ; 좌하단 외부
+      (cons 10 pt9)   ; 좌하단 안쪽
+      (cons 42 0.4142135623730951)  ; 필렛 3: pt9→pt10 (좌하단 접합부)
+      (cons 10 pt10)  ; 웹 좌하단
+      (cons 10 pt11)  ; 웹 좌상단
+      (cons 42 0.4142135623730951)  ; 필렛 4: pt11→pt12 (좌상단 접합부)
+      (cons 10 pt12)  ; 좌상단 안쪽
     )
   )
   
@@ -861,6 +866,12 @@
   ))
   
   ;; 폴리라인 생성 (entmake 사용)
+  ;; 순서 수정: 교차 방지를 위해 직사각형 순서로 연결
+  ;; panel-pt1: pt1 + 25dx + (width/2)perp
+  ;; panel-pt2: pt2 - 25dx - (width/2)perp
+  ;; panel-pt3: pt2 - 25dx + (width/2)perp
+  ;; panel-pt4: pt1 + 25dx - (width/2)perp
+  ;; 올바른 순서: pt4 → pt2 → pt3 → pt1 (닫힘으로 pt4로 복귀)
   (entmake
     (list
       '(0 . "LWPOLYLINE")
@@ -870,10 +881,10 @@
       '(62 . 1)  ; 색상: 빨강(1)
       '(90 . 4)  ; 정점 개수
       '(70 . 1)  ; 닫힘 플래그
-      (cons 10 panel-pt1)
-      (cons 10 panel-pt2)
-      (cons 10 panel-pt3)
-      (cons 10 panel-pt4)
+      (cons 10 panel-pt4)  ; pt1 - (width/2)perp
+      (cons 10 panel-pt2)  ; pt2 - (width/2)perp
+      (cons 10 panel-pt3)  ; pt2 + (width/2)perp
+      (cons 10 panel-pt1)  ; pt1 + (width/2)perp
     )
   )
   
