@@ -590,9 +590,9 @@
              ;; 띠장 옵셋 생성
              (create-wale-offsets boundary-ent *tsp-wale-spec*)
              
-             ;; H-Pile 세트 생성 (테스트용: 0,0 위치에 1세트)
+             ;; H-Pile 세트 생성 (경계선의 가장 긴 세그먼트 중간에 생성)
              (princ "\n\n>>> H-Pile 세트 생성 시작...")
-             (create-hpile-set '(0 0) *tsp-hpile-spec* *tsp-ctc*)
+             (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc*)
              
              (princ "\n========================================")
              (princ "\n작업 완료!")
@@ -612,6 +612,94 @@
   )
   
   (princ)
+)
+
+;;; ----------------------------------------------------------------------
+;;; 경계선에서 가장 긴 세그먼트 찾기
+;;; ----------------------------------------------------------------------
+
+(defun get-longest-segment (ent / ent-data ent-type vertices num-vertices i pt1 pt2 dist max-dist longest-seg)
+  (setq ent-data (entget ent))
+  (setq ent-type (cdr (assoc 0 ent-data)))
+  
+  (cond
+    ;; LWPOLYLINE 처리
+    ((= ent-type "LWPOLYLINE")
+     (setq vertices '())
+     (foreach item ent-data
+       (if (= (car item) 10)
+         (setq vertices (append vertices (list (cdr item))))
+       )
+     )
+     
+     (setq num-vertices (length vertices))
+     (setq max-dist 0)
+     (setq longest-seg nil)
+     
+     ;; 각 세그먼트의 길이 계산
+     (setq i 0)
+     (while (< i (- num-vertices 1))
+       (setq pt1 (nth i vertices))
+       (setq pt2 (nth (+ i 1) vertices))
+       (setq dist (distance pt1 pt2))
+       
+       (if (> dist max-dist)
+         (progn
+           (setq max-dist dist)
+           (setq longest-seg (list pt1 pt2))
+         )
+       )
+       
+       (setq i (+ i 1))
+     )
+     
+     longest-seg
+    )
+    
+    ;; LINE 처리
+    ((= ent-type "LINE")
+     (setq pt1 (cdr (assoc 10 ent-data)))
+     (setq pt2 (cdr (assoc 11 ent-data)))
+     (list pt1 pt2)
+    )
+    
+    ;; 기타
+    (t
+     nil
+    )
+  )
+)
+
+;;; ----------------------------------------------------------------------
+;;; 경계선에 H-Pile 세트 생성
+;;; ----------------------------------------------------------------------
+
+(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt)
+  ;; 가장 긴 세그먼트 찾기
+  (setq longest-seg (get-longest-segment boundary-ent))
+  
+  (if longest-seg
+    (progn
+      (setq pt1 (car longest-seg))
+      (setq pt2 (cadr longest-seg))
+      
+      ;; 중점 계산
+      (setq mid-pt (list
+        (/ (+ (car pt1) (car pt2)) 2.0)
+        (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+      ))
+      
+      (princ (strcat "\n가장 긴 세그먼트 길이: " (rtos (distance pt1 pt2) 2 2) "mm"))
+      (princ (strcat "\n중점 위치: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
+      
+      ;; H-Pile 세트 생성
+      (create-hpile-set mid-pt hpile-spec ctc)
+    )
+    (progn
+      (princ "\n경계선에서 세그먼트를 찾을 수 없습니다!")
+      nil
+    )
+  )
 )
 
 ;;; ----------------------------------------------------------------------
@@ -767,8 +855,8 @@
   (setq tw (nth 2 hpile-values))
   (setq tf (nth 3 hpile-values))
   
-  ;; 레이어명 생성
-  (setq layer-name (strcat "_" hpile-spec))
+  ;; 레이어명 생성 (× 기호를 x로 변경하여 유효한 레이어명 생성)
+  (setq layer-name (strcat "_H-Pile_" (rtos h 2 0) "x" (rtos b 2 0) "x" (rtos tw 2 0) "/" (rtos tf 2 0)))
   
   ;; 레이어 생성
   (create-layer-if-not-exists layer-name "3")
