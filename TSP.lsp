@@ -770,19 +770,32 @@
   ;; 상단 플랜지 좌측
   (setq pt12 (list (- cx half-b) (+ cy (- half-h half-tf)))) ; 좌상단 안쪽
   
-  ;; 폴리라인 생성
-  (command "._PLINE"
-    pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12
-    "_C"
+  ;; 폴리라인 생성 (entmake 사용)
+  (entmake
+    (list
+      '(0 . "LWPOLYLINE")
+      '(100 . "AcDbEntity")
+      '(100 . "AcDbPolyline")
+      (cons 8 layer-name)
+      (cons 62 3)  ; 색상: 초록(3)
+      '(90 . 12)   ; 정점 개수
+      '(70 . 1)    ; 닫힘 플래그
+      (cons 10 pt1)
+      (cons 10 pt2)
+      (cons 10 pt3)
+      (cons 10 pt4)
+      (cons 10 pt5)
+      (cons 10 pt6)
+      (cons 10 pt7)
+      (cons 10 pt8)
+      (cons 10 pt9)
+      (cons 10 pt10)
+      (cons 10 pt11)
+      (cons 10 pt12)
+    )
   )
   
   (setq pline-ent (entlast))
-  
-  ;; 레이어 및 색상 변경
-  (if pline-ent
-    (command "._CHPROP" pline-ent "" "_LA" layer-name "_C" "3" "")
-  )
-  
   pline-ent
 )
 
@@ -838,27 +851,33 @@
     (+ (+ (cadr pt1) (* dy (/ 25.0 1))) (* perp-dy (/ width 2.0)))
   ))
   
-  ;; 폴리라인 생성
-  (command "._PLINE"
-    panel-pt1 panel-pt2 panel-pt3 panel-pt4
-    "_C"
+  ;; 폴리라인 생성 (entmake 사용)
+  (entmake
+    (list
+      '(0 . "LWPOLYLINE")
+      '(100 . "AcDbEntity")
+      '(100 . "AcDbPolyline")
+      '(8 . "_토류판(timber)")
+      '(62 . 1)  ; 색상: 빨강(1)
+      '(90 . 4)  ; 정점 개수
+      '(70 . 1)  ; 닫힘 플래그
+      (cons 10 panel-pt1)
+      (cons 10 panel-pt2)
+      (cons 10 panel-pt3)
+      (cons 10 panel-pt4)
+    )
   )
   
   (setq pline-ent (entlast))
   
-  ;; 레이어 및 색상 변경
+  ;; 해치 생성
   (if pline-ent
-    (progn
-      (command "._CHPROP" pline-ent "" "_LA" "_토류판(timber)" "_C" "1" "")
-      
-      ;; 해치 생성
-      (command "._-BHATCH"
-        "_P" "ANSI36"
-        "30"
-        "0"
-        "_SEL" pline-ent ""
-        ""
-      )
+    (command "._-BHATCH"
+      "_P" "ANSI36"
+      "30"
+      "0"
+      "_SEL" pline-ent ""
+      ""
     )
   )
   
