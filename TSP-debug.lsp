@@ -1,41 +1,79 @@
 ;;; ======================================================================
-;;; TSP.lsp - Temporary Structure Plan
-;;; 가시설 흙막이 벽체 자동 작도 시스템
+;;; TSP-debug.lsp - Debugging Infrastructure for TSP
+;;; TSP.lsp 디버깅 기능 확장 모듈
 ;;; ======================================================================
 ;;; 
-;;; 명령어: TSP
+;;; 사용법: TSP.lsp 로드 후 이 파일의 내용을 복사하여 TSP.lsp 맨 뒤에 붙여넣으세요
 ;;; 
-;;; 작성일: 2026-01-13
+;;; 작성일: 2026-01-14
 ;;; 버전: 1.0.0
 ;;; 
 ;;; ======================================================================
 
 ;;; ----------------------------------------------------------------------
-;;; 전역 변수
+;;; 디버깅 전역 변수
 ;;; ----------------------------------------------------------------------
 
-(setq *tsp-hpile-spec* "H 298×201×9/14")     ; H-Pile 규격
-(setq *tsp-hpile-custom* '(298 201 9 14))    ; User-defined H-Pile
-(setq *tsp-wale-spec* "H 300×300×10/15")      ; 띠장 규격
-(setq *tsp-wale-custom* '(300 300 10 15))     ; User-defined 띠장
-(setq *tsp-ctc* 2.0)                           ; C.T.C 값
+(setq *tsp-debug* T)                           ; 디버그 모드 (T=활성화, nil=비활성화)
+(setq *tsp-debug-log* '())                     ; 디버그 로그 리스트
 
 ;;; ----------------------------------------------------------------------
-;;; DCL 파일 생성
+;;; 디버그 로그 함수
 ;;; ----------------------------------------------------------------------
 
+(defun debug-log (msg / timestamp)
+  (if *tsp-debug*
+    (progn
+      (setq timestamp (rtos (getvar "MILLISECS") 2 0))
+      (setq *tsp-debug-log* (append *tsp-debug-log* (list (strcat "[" timestamp "ms] " msg))))
+      (princ (strcat "\n[DEBUG] " msg))
+    )
+  )
+)
+
+(defun debug-clear ()
+  (setq *tsp-debug-log* '())
+  (if *tsp-debug*
+    (princ "\n[DEBUG] 로그 초기화 완료")
+  )
+)
+
+(defun debug-show-log ()
+  (if *tsp-debug*
+    (progn
+      (princ "\n========== DEBUG LOG ==========")
+      (foreach item *tsp-debug-log*
+        (princ (strcat "\n" item))
+      )
+      (princ "\n==============================\n")
+    )
+  )
+)
+
+;;; ----------------------------------------------------------------------
+;;; 기존 함수 재정의 (디버깅 기능 추가)
+;;; ----------------------------------------------------------------------
+
+;; create-tsp-dcl 재정의
 (defun create-tsp-dcl (/ dcl-file dcl-path lisp-path)
+  (debug-log "DIAG_START: DCL 생성 시작")
+  (debug-log (strcat "TSP 버전: 1.0.0, 날짜: 2026-01-13"))
+  (debug-log (strcat "*tsp-debug* = " (if *tsp-debug* "true" "false")))
+  
   ;; 현재 LISP 파일 경로 가져오기
   (setq lisp-path (findfile "TSP.lsp"))
+  (debug-log (strcat "LISP 파일 경로: " (if lisp-path lisp-path "not found")))
   
   (if lisp-path
     (progn
       ;; LISP 파일이 있는 디렉토리에 DCL 파일 생성
       (setq dcl-path (strcat (vl-filename-directory lisp-path) "\\tsp.dcl"))
+      (debug-log (strcat "DCL 경로 (LISP 디렉토리): " dcl-path))
     )
     (progn
       ;; LISP 파일을 찾을 수 없으면 TEMP 디렉토리 사용
       (setq dcl-path (strcat (getvar "TEMPPREFIX") "tsp.dcl"))
+      (debug-log (strcat "DCL 경로 (TEMP 디렉토리): " dcl-path))
     )
   )
   
@@ -44,6 +82,7 @@
   
   (if dcl-file
     (progn
+      (debug-log "DCL 파일 열기 성공")
       ;; 메인 Dialog
       (write-line "tsp_main : dialog {" dcl-file)
       (write-line "  label = \"TSP - Temporary Structure Plan\";" dcl-file)
@@ -219,51 +258,28 @@
       (write-line "}" dcl-file)
       
       (close dcl-file)
+      (debug-log (strcat "DCL 파일 생성 완료: " dcl-path))
       dcl-path
     )
     (progn
       (princ "\nDCL 파일 생성 실패!")
+      (debug-log "ERROR: DCL 파일 열기 실패")
       nil
     )
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; 레이어 생성 함수
-;;; ----------------------------------------------------------------------
-
-(defun create-layer-if-not-exists (layer-name color / )
-  (if (not (tblsearch "LAYER" layer-name))
-    (command "._LAYER" "_M" layer-name "_C" color layer-name "")
-  )
-)
-
-;;; ----------------------------------------------------------------------
-;;; 숫자만 입력 가능하도록 검증
-;;; ----------------------------------------------------------------------
-
-(defun is-numeric (str / result)
-  (setq result T)
-  (if (or (null str) (= str ""))
-    (setq result nil)
-    (if (not (numberp (read str)))
-      (setq result nil)
-    )
-  )
-  result
-)
-
-;;; ----------------------------------------------------------------------
-;;; H형강 규격 파싱
-;;; ----------------------------------------------------------------------
-
-(defun parse-h-spec (spec-str / clean-str char-list i ch result-str)
+;; parse-h-spec 재정의
+(defun parse-h-spec (spec-str / clean-str char-list i ch result-str parsed-result)
   ;; "H 298×201×9/14" -> (298 201 9 14)
   ;; 모든 문자를 하나씩 검사하여 숫자와 공백만 남김
+  (debug-log (strcat "parse-h-spec 입력: \"" (if spec-str spec-str "nil") "\""))
+  
   (if (and spec-str (wcmatch spec-str "H *"))
     (progn
       ;; "H " 제거
       (setq clean-str (substr spec-str 3))
+      (debug-log (strcat "'H ' 제거 후: \"" clean-str "\""))
       (setq result-str "")
       (setq i 1)
       
@@ -286,24 +302,37 @@
       )
       
       ;; "298 201 9 14" 형태의 문자열을 리스트로 변환
-      (read (strcat "(" result-str ")"))
+      (debug-log (strcat "숫자 추출 결과: \"" result-str "\""))
+      (setq parsed-result (read (strcat "(" result-str ")")))
+      (debug-log (strcat "파싱 완료: " (vl-princ-to-string parsed-result)))
+      parsed-result
     )
-    nil
+    (progn
+      (debug-log "ERROR: parse-h-spec 실패 (형식 불일치)")
+      nil
+    )
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; 띠장 옵셋 생성
-;;; ----------------------------------------------------------------------
-
+;; create-wale-offsets 재정의
 (defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4 ent-data ent-type first-vertex inside-pt wale-values)
+  (debug-log "=== create-wale-offsets 시작 ===")
+  (debug-log (strcat "wale-spec: " wale-spec))
+  
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
+  (debug-log "레이어 '_띠장(wale)' 확인/생성 완료")
   
   ;; 규격 파싱
   (if (= wale-spec "User-defined")
-    (setq wale-values *tsp-wale-custom*)
-    (setq wale-values (parse-h-spec wale-spec))
+    (progn
+      (setq wale-values *tsp-wale-custom*)
+      (debug-log (strcat "User-defined 띠장: " (vl-princ-to-string wale-values)))
+    )
+    (progn
+      (setq wale-values (parse-h-spec wale-spec))
+      (debug-log (strcat "파싱된 띠장 규격: " (vl-princ-to-string wale-values)))
+    )
   )
   
   (setq h (nth 0 wale-values))
@@ -362,23 +391,27 @@
     (command "._CHPROP" obj4 "" "_LA" "_띠장(wale)" "_C" "3" "")
   )
   
+  (debug-log "=== create-wale-offsets 완료 ===")
   (princ "\n띠장 옵셋 생성 완료!")
 )
 
-;;; ----------------------------------------------------------------------
-;;; H-Pile Dialog 콜백 함수
-;;; ----------------------------------------------------------------------
-
+;; hpile-dialog-callback 재정의
 (defun hpile-dialog-callback (dcl-path / dcl-id result hpile-idx wale-idx)
+  (debug-log "=== hpile-dialog-callback 시작 ===")
+  (debug-log (strcat "DCL 경로: " dcl-path))
+  
   (setq dcl-id (load_dialog dcl-path))
+  (debug-log (strcat "DCL 로드 ID: " (if dcl-id (itoa dcl-id) "nil")))
   
   (if (not (new_dialog "tsp_hpile" dcl-id))
     (progn
       (princ "\nDialog 로드 실패!")
+      (debug-log "ERROR: tsp_hpile 다이얼로그 로드 실패")
       (unload_dialog dcl-id)
       nil
     )
     (progn
+      (debug-log "tsp_hpile 다이얼로그 표시 준비 완료")
       ;; 드롭다운 리스트 초기화
       (start_list "hpile_spec")
       (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
@@ -501,27 +534,33 @@
       
       ;; Dialog 표시
       (setq result (start_dialog))
+      (debug-log (strcat "Dialog 결과: " (itoa result)))
+      (debug-log (strcat "선택된 H-Pile: " *tsp-hpile-spec*))
+      (debug-log (strcat "선택된 띠장: " *tsp-wale-spec*))
+      (debug-log (strcat "C.T.C: " (rtos *tsp-ctc* 2 2)))
       (unload_dialog dcl-id)
+      (debug-log "=== hpile-dialog-callback 완료 ===")
       
       result
     )
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; 메인 Dialog 콜백 함수
-;;; ----------------------------------------------------------------------
-
+;; main-dialog-callback 재정의
 (defun main-dialog-callback (dcl-path / dcl-id result)
+  (debug-log "=== main-dialog-callback 시작 ===")
   (setq dcl-id (load_dialog dcl-path))
+  (debug-log (strcat "DCL 로드 ID: " (if dcl-id (itoa dcl-id) "nil")))
   
   (if (not (new_dialog "tsp_main" dcl-id))
     (progn
       (princ "\nDialog 로드 실패!")
+      (debug-log "ERROR: tsp_main 다이얼로그 로드 실패")
       (unload_dialog dcl-id)
       nil
     )
     (progn
+      (debug-log "tsp_main 다이얼로그 표시 준비 완료")
       ;; H-Pile 버튼
       (action_tile "btn_hpile"
         "(progn
@@ -544,24 +583,33 @@
       
       ;; Dialog 표시
       (setq result (start_dialog))
+      (debug-log (strcat "메인 Dialog 결과: " (itoa result)))
       (unload_dialog dcl-id)
+      (debug-log "=== main-dialog-callback 완료 ===")
       
       result
     )
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; TSP 메인 함수
-;;; ----------------------------------------------------------------------
-
+;; C:TSP 재정의
 (defun C:TSP (/ dcl-path dcl-id main-result hpile-result boundary-ent)
+  ;; 디버그 로그 초기화
+  (debug-clear)
+  
+  (debug-log "========================================")
+  (debug-log "TSP 명령 시작")
+  (debug-log "버전: 1.0.0")
+  (debug-log "날짜: 2026-01-13")
+  (debug-log "========================================")
+  
   (princ "\n========================================")
   (princ "\nTSP - Temporary Structure Plan")
   (princ "\n========================================\n")
   
   ;; DCL 파일 생성
   (setq dcl-path (create-tsp-dcl))
+  (debug-log (strcat "DCL 파일 경로: " (if dcl-path dcl-path "nil")))
   
   (if (not dcl-path)
     (progn
@@ -607,41 +655,56 @@
          (if boundary-ent
            (progn
              (princ "\n경계선 선택 완료!")
+             (debug-log (strcat "경계선 엔티티: " (vl-princ-to-string boundary-ent)))
+             (debug-log (strcat "엔티티 타입: " (cdr (assoc 0 (entget boundary-ent)))))
              
              ;; 띠장 옵셋 생성
              (create-wale-offsets boundary-ent *tsp-wale-spec*)
              
              ;; H-Pile 세트 생성 (경계선의 가장 긴 세그먼트 중간에 생성)
              (princ "\n\n>>> H-Pile 세트 생성 시작...")
+             (debug-log "=== H-Pile 세트 생성 시작 ===")
              (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc*)
              
              (princ "\n========================================")
              (princ "\n작업 완료!")
              (princ "\n========================================\n")
+             (debug-log "========================================")
+             (debug-log "TSP 작업 완료")
+             (debug-log "========================================")
+             
+             ;; 디버그 로그 출력 (옵션)
+             ;; (debug-show-log)
            )
-           (princ "\n경계선 선택 취소됨\n")
+           (progn
+             (princ "\n경계선 선택 취소됨\n")
+             (debug-log "경계선 선택 취소됨")
+           )
          )
        )
-       (princ "\n설정 취소됨\n")
+       (progn
+         (princ "\n설정 취소됨\n")
+         (debug-log "설정 취소됨")
+       )
      )
     )
     
     ;; 취소
     (t
      (princ "\n취소됨\n")
+     (debug-log "TSP 명령 취소됨")
     )
   )
   
   (princ)
 )
 
-;;; ----------------------------------------------------------------------
-;;; 경계선에서 가장 긴 세그먼트 찾기
-;;; ----------------------------------------------------------------------
-
+;; get-longest-segment 재정의
 (defun get-longest-segment (ent / ent-data ent-type vertices num-vertices i pt1 pt2 dist max-dist longest-seg)
+  (debug-log "=== get-longest-segment 시작 ===")
   (setq ent-data (entget ent))
   (setq ent-type (cdr (assoc 0 ent-data)))
+  (debug-log (strcat "엔티티 타입: " ent-type))
   
   (cond
     ;; LWPOLYLINE 처리
@@ -654,6 +717,7 @@
      )
      
      (setq num-vertices (length vertices))
+     (debug-log (strcat "정점 개수: " (itoa num-vertices)))
      (setq max-dist 0)
      (setq longest-seg nil)
      
@@ -674,6 +738,8 @@
        (setq i (+ i 1))
      )
      
+     (debug-log (strcat "가장 긴 세그먼트 길이: " (rtos max-dist 2 2)))
+     (debug-log "=== get-longest-segment 완료 ===")
      longest-seg
     )
     
@@ -691,11 +757,12 @@
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; 경계선에 H-Pile 세트 생성
-;;; ----------------------------------------------------------------------
-
+;; create-hpile-set-on-boundary 재정의
 (defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt)
+  (debug-log "=== create-hpile-set-on-boundary 시작 ===")
+  (debug-log (strcat "H-Pile 규격: " hpile-spec))
+  (debug-log (strcat "C.T.C: " (rtos ctc 2 2) "m"))
+  
   ;; 가장 긴 세그먼트 찾기
   (setq longest-seg (get-longest-segment boundary-ent))
   
@@ -712,21 +779,21 @@
       
       (princ (strcat "\n가장 긴 세그먼트 길이: " (rtos (distance pt1 pt2) 2 2) "mm"))
       (princ (strcat "\n중점 위치: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
+      (debug-log (strcat "중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
       
       ;; H-Pile 세트 생성
       (create-hpile-set mid-pt hpile-spec ctc)
+      (debug-log "=== create-hpile-set-on-boundary 완료 ===")
     )
     (progn
       (princ "\n경계선에서 세그먼트를 찾을 수 없습니다!")
+      (debug-log "ERROR: 세그먼트를 찾을 수 없음")
       nil
     )
   )
 )
 
-;;; ----------------------------------------------------------------------
-;;; H-Pile 단면 생성 (I자 형태)
-;;; ----------------------------------------------------------------------
-
+;; create-hpile-section 재정의
 (defun create-hpile-section (insert-pt h b tw tf layer-name / half-h half-b half-tw half-tf pt1 pt2 pt3 pt4 pt5 pt6 pt7 pt8 pt9 pt10 pt11 pt12 pline-ent)
   ;; insert-pt: 삽입 기준점 (중심)
   ;; h: 높이 (mm)
@@ -735,11 +802,15 @@
   ;; tf: 플랜지 두께 (mm)
   ;; layer-name: 레이어명
   
+  (debug-log (strcat "create-hpile-section: H=" (rtos h 2 0) " B=" (rtos b 2 0) " tw=" (rtos tw 2 0) " tf=" (rtos tf 2 0)))
+  
   ;; 반값 계산
   (setq half-h (/ h 2.0))
   (setq half-b (/ b 2.0))
   (setq half-tw (/ tw 2.0))
   (setq half-tf (/ tf 2.0))
+  
+  (debug-log (strcat "half-h=" (rtos half-h 2 2) " half-b=" (rtos half-b 2 2) " half-tw=" (rtos half-tw 2 2) " half-tf=" (rtos half-tf 2 2)))
   
   ;; I형강 좌표 계산 (중심 기준, 12개 점)
   ;; 상단 플랜지 (좌측 상단부터 시계방향)
@@ -776,19 +847,23 @@
   
   ;; 레이어 및 색상 변경
   (if pline-ent
-    (command "._CHPROP" pline-ent "" "_LA" layer-name "_C" "3" "")
+    (progn
+      (command "._CHPROP" pline-ent "" "_LA" layer-name "_C" "3" "")
+      (debug-log (strcat "H-Pile 단면 생성 완료, 엔티티: " (vl-princ-to-string pline-ent)))
+    )
+    (debug-log "ERROR: H-Pile 폴리라인 생성 실패")
   )
   
   pline-ent
 )
 
-;;; ----------------------------------------------------------------------
-;;; 토류판 생성
-;;; ----------------------------------------------------------------------
-
+;; create-timber-panel 재정의
 (defun create-timber-panel (pt1 pt2 width / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy)
   ;; pt1, pt2: H-Pile 중심점
   ;; width: 토류판 두께 (70mm)
+  
+  (debug-log "=== create-timber-panel 시작 ===")
+  (debug-log (strcat "토류판 두께: " (rtos width 2 0) "mm"))
   
   ;; 두 점 사이의 중점 계산
   (setq mid-pt (list
@@ -848,6 +923,7 @@
       (command "._CHPROP" pline-ent "" "_LA" "_토류판(timber)" "_C" "1" "")
       
       ;; 해치 생성
+      (debug-log "해치 생성 시작 (ANSI36, 축척 30)")
       (command "._-BHATCH"
         "_P" "ANSI36"
         "30"
@@ -855,20 +931,25 @@
         "_SEL" pline-ent ""
         ""
       )
+      (debug-log "토류판 및 해치 생성 완료")
     )
+    (debug-log "ERROR: 토류판 폴리라인 생성 실패")
   )
   
+  (debug-log "=== create-timber-panel 완료 ===")
   pline-ent
 )
 
-;;; ----------------------------------------------------------------------
-;;; H-Pile 세트 생성 (H-Pile 2개 + 토류판 1개)
-;;; ----------------------------------------------------------------------
-
-(defun create-hpile-set (pt1 hpile-spec ctc / h b tw tf layer-name pt2 hpile1 hpile2 timber)
+;; create-hpile-set 재정의
+(defun create-hpile-set (pt1 hpile-spec ctc / h b tw tf layer-name pt2 hpile1 hpile2 timber hpile-values)
   ;; pt1: 첫 번째 H-Pile 중심점
   ;; hpile-spec: H-Pile 규격 문자열
   ;; ctc: C.T.C 거리 (m → mm 변환 필요)
+  
+  (debug-log "=== create-hpile-set 시작 ===")
+  (debug-log (strcat "중심점: (" (rtos (car pt1) 2 2) ", " (rtos (cadr pt1) 2 2) ")"))
+  (debug-log (strcat "H-Pile 규격: " hpile-spec))
+  (debug-log (strcat "C.T.C: " (rtos ctc 2 2) "m"))
   
   ;; 규격 파싱
   (princ (strcat "\n[DEBUG] H-Pile 규격 문자열: \"" hpile-spec "\""))
@@ -928,8 +1009,13 @@
 )
 
 ;;; ----------------------------------------------------------------------
-;;; 시작 메시지
+;;; 로드 메시지
 ;;; ----------------------------------------------------------------------
 
-(princ "\nTSP.lsp loaded. Command: TSP")
+(princ "\nTSP-debug.lsp loaded. Debugging features enabled.")
+(princ "\n\n디버그 명령:")
+(princ "\n- (debug-show-log): 디버그 로그 출력")
+(princ "\n- (debug-clear): 디버그 로그 초기화")
+(princ "\n- (setq *tsp-debug* nil): 디버그 모드 비활성화")
+(princ "\n- (setq *tsp-debug* T): 디버그 모드 활성화\n")
 (princ)
