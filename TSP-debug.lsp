@@ -832,7 +832,7 @@
   (setq pt5  (list (+ cx half-tw) (- cy (- half-h half-tf fillet-r))))     ; 5. 웹 우하단 (필렛 시작 전)
   
   ;; 우측 하단 필렛
-  (setq pt6  (list (+ cx (+ half-tw fillet-r)) (- cy (- half-h half-tf fillet-r)))) ; 6. 필렛 시작 (웹 근처, 우하)
+  (setq pt6  (list (+ cx (+ half-tw fillet-r)) (- cy (- half-h half-tf)))) ; 6. 필렛 시작 (웹 근처, 우하)
   
   ;; 하단 플랜지 - 우측
   (setq pt7  (list (+ cx half-b) (- cy (- half-h half-tf))))               ; 7. 우하 플랜지 상단
@@ -848,7 +848,7 @@
   (setq pt13 (list (- cx half-tw) (+ cy (- half-h half-tf fillet-r))))     ; 13. 웹 좌상단 (필렛 시작 전)
   
   ;; 좌측 상단 필렛
-  (setq pt14 (list (- cx (+ half-tw fillet-r)) (+ cy (- half-h half-tf fillet-r)))) ; 14. 필렛 시작 (웹 근찄, 좌상)
+  (setq pt14 (list (- cx (+ half-tw fillet-r)) (+ cy (- half-h half-tf)))) ; 14. 필렛 시작 (웹 근찄, 좌상)
   
   ;; 상단 플랜지 - 좌측
   (setq pt15 (list (- cx half-b) (+ cy (- half-h half-tf))))               ; 15. 좌상 플랜지 하단
