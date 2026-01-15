@@ -1616,129 +1616,88 @@
   timber-pline
 )
 
-;; 모서리(꼭지점)에 H-Pile 배치
-(defun place-hpile-at-corner (vertex lines h b tw tf hpile-block / 
-  prev-line next-line prev-pt next-pt angle1 angle2 interior-angle 
-  bisector-angle is-convex half-h half-b hpile-center hpile-rotation
-  flange-bottom-center line-ent line-data pt1 pt2)
+;; 모서리(꼭지점)에 H-Pile 배치 (간단한 버전 - EXPLODE 불필요)
+(defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block / 
+  interior-angle bisector-angle is-convex half-h half-b hpile-center hpile-rotation
+  flange-bottom-center temp-center)
   
   (debug-log (strcat "=== 모서리 H-Pile 배치: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ") ==="))
   
-  ;; vertex에 연결된 두 선분 찾기
-  (setq prev-line nil)
-  (setq next-line nil)
+  (debug-log (strcat "각도1: " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
+  (debug-log (strcat "각도2: " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
-  (foreach line-ent lines
-    (setq line-data (entget line-ent))
-    (setq pt1 (cdr (assoc 10 line-data)))
-    (setq pt2 (cdr (assoc 11 line-data)))
-    
-    ;; vertex가 pt2인 선분 (이전 선분)
-    (if (and (equal (car pt2) (car vertex) 0.01)
-             (equal (cadr pt2) (cadr vertex) 0.01))
-      (progn
-        (setq prev-line line-ent)
-        (setq prev-pt pt1)
-      )
-    )
-    
-    ;; vertex가 pt1인 선분 (다음 선분)
-    (if (and (equal (car pt1) (car vertex) 0.01)
-             (equal (cadr pt1) (cadr vertex) 0.01))
-      (progn
-        (setq next-line line-ent)
-        (setq next-pt pt2)
-      )
-    )
+  ;; 내각 계산 (CCW 방향)
+  (setq interior-angle (- angle2 angle1))
+  (if (< interior-angle 0)
+    (setq interior-angle (+ interior-angle (* 2 pi)))
   )
   
-  (if (and prev-line next-line)
+  (debug-log (strcat "내각: " (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
+  
+  ;; 볼록/오목 판단
+  (setq is-convex (< interior-angle pi))
+  (debug-log (if is-convex "볼록 꼭지점" "오목 꼭지점"))
+  
+  ;; 각의 이등분선 계산
+  (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
+  (debug-log (strcat "이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
+  
+  ;; H-Pile 크기
+  (setq half-h (/ h 2.0))  ; 149 mm
+  (setq half-b (/ b 2.0))  ; 100.5 mm
+  
+  ;; H-Pile 중심 및 회전 계산
+  (if is-convex
     (progn
-      ;; 두 선분의 각도 계산
-      (setq angle1 (angle vertex prev-pt))  ; 이전 선분 (vertex에서 prev-pt로)
-      (setq angle2 (angle vertex next-pt))  ; 다음 선분 (vertex에서 next-pt로)
+      ;; 볼록: H-Pile 중심 = vertex + 이등분선 방향으로 half-h
+      (setq hpile-center (polar vertex bisector-angle half-h))
+      (setq hpile-rotation bisector-angle)
       
-      (debug-log (strcat "각도1: " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
-      (debug-log (strcat "각도2: " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
-      
-      ;; 내각 계산 (CCW 방향)
-      (setq interior-angle (- angle2 angle1))
-      (if (< interior-angle 0)
-        (setq interior-angle (+ interior-angle (* 2 pi)))
-      )
-      
-      (debug-log (strcat "내각: " (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
-      
-      ;; 볼록/오목 판단
-      (setq is-convex (< interior-angle pi))
-      (debug-log (if is-convex "볼록 꼭지점" "오목 꼭지점"))
-      
-      ;; 각의 이등분선 계산
-      (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
-      
-      ;; H-Pile 중심 위치 및 회전 계산
-      (setq half-h (/ h 2.0))
-      (setq half-b (/ b 2.0))
-      
-      (if is-convex
-        ;; 볼록 꼭지점: 플랜지 밑면 중앙 = vertex
-        (progn
-          ;; H-Pile 중심 = vertex + (이등분선 방향으로 half-h)
-          (setq hpile-center (polar vertex bisector-angle half-h))
-          (setq hpile-rotation bisector-angle)
-          (debug-log "볼록: 플랜지 밑면 중앙이 꼭지점과 일치")
-        )
-        ;; 오목 꼭지점: 추가 오프셋 필요
-        (progn
-          ;; 임시 중심 = vertex + (이등분선 방향으로 half-h)
-          (setq hpile-center (polar vertex bisector-angle half-h))
-          ;; 최종 중심 = 이등분선 반대방향으로 half-b 오프셋
-          (setq hpile-center (polar hpile-center (+ bisector-angle pi) half-b))
-          (setq hpile-rotation bisector-angle)
-          (debug-log (strcat "오목: half-b (" (rtos half-b 2 2) "mm) 오프셋 적용"))
-        )
-      )
-      
-      (debug-log (strcat "H-Pile 중심: (" (rtos (car hpile-center) 2 2) ", " (rtos (cadr hpile-center) 2 2) ")"))
-      (debug-log (strcat "회전 각도: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
-      
-      ;; H-Pile 블록 배치
-      (entmake
-        (list
-          '(0 . "INSERT")
-          (cons 2 hpile-block)
-          '(8 . "_측면말뚝")
-          (cons 10 hpile-center)
-          '(41 . 1.0)
-          '(42 . 1.0)
-          '(43 . 1.0)
-          (cons 50 hpile-rotation)
-        )
-      )
-      
-      ;; 아래 플랜지 중심에 POINT 생성 (시각적 확인용)
-      ;; 볼록: 플랜지 밑면 중앙 = vertex (꼭지점)
-      ;; 오목: 플랜지 밑면 중앙 = vertex에서 B/2 바깥쪽
-      (if is-convex
-        (setq flange-bottom-center vertex)
-        ;; 오목: vertex에서 이등분선 반대방향으로 B/2 이동
-        (setq flange-bottom-center (polar vertex (+ bisector-angle pi) half-b))
-      )
-      
-      (entmake
-        (list
-          '(0 . "POINT")
-          '(8 . "_측면말뚝")
-          (cons 10 flange-bottom-center)
-        )
-      )
-      
-      (debug-log (strcat "아래 플랜지 중심 POINT: (" (rtos (car flange-bottom-center) 2 2) ", " (rtos (cadr flange-bottom-center) 2 2) ")"))
-      
-      (debug-log "H-Pile 배치 완료")
+      ;; 아래 플랜지 중심 = vertex (꼭지점)
+      (setq flange-bottom-center vertex)
+      (debug-log "볼록: 플랜지 밑면 중앙이 꼭지점과 일치")
     )
-    (debug-log "ERROR: 연결된 선분을 찾을 수 없음")
+    (progn
+      ;; 오목: 임시 중심 = vertex + 이등분선 방향으로 half-h
+      ;;       최종 중심 = 임시 중심 + 반대 방향으로 half-b
+      (setq temp-center (polar vertex bisector-angle half-h))
+      (setq hpile-center (polar temp-center (+ bisector-angle pi) half-b))
+      (setq hpile-rotation bisector-angle)
+      
+      ;; 아래 플랜지 중심 = vertex + 이등분선 반대 방향으로 half-b (경계선에서 100.5mm 바깥쪽)
+      (setq flange-bottom-center (polar vertex (+ bisector-angle pi) half-b))
+      (debug-log (strcat "오목: half-b (" (rtos half-b 2 2) "mm) 오프셋 적용"))
+    )
   )
+  
+  (debug-log (strcat "H-Pile 중심: (" (rtos (car hpile-center) 2 2) ", " (rtos (cadr hpile-center) 2 2) ")"))
+  (debug-log (strcat "회전 각도: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
+  (debug-log (strcat "아래 플랜지 중심: (" (rtos (car flange-bottom-center) 2 2) ", " (rtos (cadr flange-bottom-center) 2 2) ")"))
+  
+  ;; H-Pile INSERT
+  (entmake
+    (list
+      '(0 . "INSERT")
+      (cons 2 hpile-block)
+      '(8 . "_측면말뚝")
+      (cons 10 hpile-center)
+      '(41 . 1.0)
+      '(42 . 1.0)
+      '(43 . 1.0)
+      (cons 50 hpile-rotation)
+    )
+  )
+  
+  ;; 아래 플랜지 중심에 POINT 생성
+  (entmake
+    (list
+      '(0 . "POINT")
+      '(8 . "_측면말뚝")
+      (cons 10 flange-bottom-center)
+    )
+  )
+  
+  (debug-log "H-Pile 배치 완료")
 )
 
 ;;; ----------------------------------------------------------------------
@@ -1990,62 +1949,34 @@
   (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
   (debug-log "=== 4단계: 모서리 H-Pile 배치 시작 ===")
   
-  ;; 원본 경계선 복사 및 EXPLODE
-  (command "._COPY" boundary-ent "" "0,0,0" "0,0,0")
-  (setq boundary-copy (entlast))
-  (debug-log (strcat "원본 경계선 복사: " (vl-princ-to-string boundary-copy)))
-  
-  ;; 복사본 EXPLODE
-  (setq last-before-boundary (entlast))
-  (command "._EXPLODE" boundary-copy)
-  (command)
-  
-  ;; EXPLODE된 원본 경계선의 LINE 수집
-  (setq boundary-lines '())
-  (setq first-new-boundary (if last-before-boundary (entnext last-before-boundary) (entnext)))
-  (setq current-ent first-new-boundary)
-  (while current-ent
-    (setq ent-data (entget current-ent))
-    (if (= (cdr (assoc 0 ent-data)) "LINE")
-      (progn
-        (setq boundary-lines (append boundary-lines (list current-ent)))
-        (debug-log (strcat "원본 경계선 LINE 수집: " (vl-princ-to-string current-ent)))
-      )
-    )
-    (setq current-ent (entnext current-ent))
-  )
-  
-  (debug-log (strcat "원본 경계선 LINE 개수: " (itoa (length boundary-lines))))
-  
-  ;; 원본 경계선에서 꼭지점 추출
+  ;; LWPOLYLINE에서 직접 꼭지점 추출
+  (setq boundary-data (entget boundary-ent))
   (setq vertices '())
-  (foreach line-ent boundary-lines
-    (setq line-data (entget line-ent))
-    (setq pt1 (cdr (assoc 10 line-data)))
-    (setq pt2 (cdr (assoc 11 line-data)))
+  (foreach item boundary-data
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
+    )
+  )
+  
+  (princ (strcat "\n  경계선 꼭지점 개수: " (itoa (length vertices))))
+  (debug-log (strcat "경계선 꼭지점 개수: " (itoa (length vertices))))
+  
+  ;; 각 꼭지점에 H-Pile 배치 (이전/현재/다음 꼭지점 사용)
+  (setq i 0)
+  (setq num-vertices (length vertices))
+  (while (< i num-vertices)
+    (setq prev-vertex (nth (if (= i 0) (- num-vertices 1) (- i 1)) vertices))
+    (setq curr-vertex (nth i vertices))
+    (setq next-vertex (nth (if (= i (- num-vertices 1)) 0 (+ i 1)) vertices))
     
-    ;; 중복 체크하여 꼭지점 추가
-    (if (not (member pt1 vertices))
-      (setq vertices (append vertices (list pt1)))
-    )
-    (if (not (member pt2 vertices))
-      (setq vertices (append vertices (list pt2)))
-    )
-  )
-  
-  (princ (strcat "\n  원본 경계선 꼭지점 개수: " (itoa (length vertices))))
-  (debug-log (strcat "원본 경계선 꼭지점 개수: " (itoa (length vertices))))
-  
-  ;; 각 꼭지점에 H-Pile 배치 (원본 경계선 LINE 사용)
-  (foreach vertex vertices
-    (place-hpile-at-corner vertex boundary-lines h b tw tf hpile-block)
-  )
-  
-  ;; EXPLODE된 원본 경계선 LINE 삭제
-  (foreach line-ent boundary-lines
-    (if (and line-ent (entget line-ent))
-      (entdel line-ent)
-    )
+    ;; 각도 계산
+    (setq angle1 (angle prev-vertex curr-vertex))
+    (setq angle2 (angle curr-vertex next-vertex))
+    
+    ;; H-Pile 배치
+    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block)
+    
+    (setq i (+ i 1))
   )
   (debug-log "원본 경계선 EXPLODE LINE 삭제 완료")
   
