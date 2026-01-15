@@ -1492,7 +1492,9 @@
   h b tw tf hpile-values timber-block hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
   line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
-  last-before first-new current-ent ent-data new-insert delete-count)
+  last-before first-new current-ent ent-data new-insert delete-count
+  seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
+  dist-from-pt1 dist-from-pt2 pt)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1625,57 +1627,122 @@
   (princ (strcat "\nEXPLODE 완료: " (itoa (length exploded-lines)) "개 선분 생성"))
   (debug-log (strcat "EXPLODE 후 LINE 개수: " (itoa (length exploded-lines))))
   
-  ;; ===== 3단계: 각 LINE의 중점에 임시 POINT 생성 + 토류판 배치 =====
-  (princ "\n\n[3단계] 각 선분 중점에 토류판 배치...")
+  ;; ===== 3단계: 각 LINE을 따라 C.T.C 간격으로 POINT 생성 + 토류판 배치 =====
+  (princ "\n\n[3단계] 각 선분을 따라 C.T.C 간격으로 토류판 배치...")
+  (debug-log "=== 3단계: C.T.C 간격 POINT 생성 시작 ===")
   
   (foreach line-ent exploded-lines
     (setq line-data (entget line-ent))
     (setq pt1 (cdr (assoc 10 line-data)))
     (setq pt2 (cdr (assoc 11 line-data)))
     
+    ;; 선분 길이와 각도 계산
+    (setq seg-length (distance pt1 pt2))
+    (setq seg-angle (angle pt1 pt2))
+    (setq angle-deg (/ (* seg-angle 180.0) pi))
+    
     ;; 중점 계산
     (setq mid-pt (list
       (/ (+ (car pt1) (car pt2)) 2.0)
       (/ (+ (cadr pt1) (cadr pt2)) 2.0)
-      0.0  ; Z 좌표 명시
+      0.0
     ))
     
-    ;; 선분 각도 계산 (라디안)
-    (setq seg-angle (angle pt1 pt2))
-    (setq angle-deg (/ (* seg-angle 180.0) pi))  ; 도 단위로 변환
+    (princ (strcat "\n\n  선분 길이: " (rtos seg-length 2 2) "mm, 각도=" (rtos angle-deg 2 0) "deg"))
+    (debug-log (strcat "선분 길이: " (rtos seg-length 2 2) "mm, 각도=" (rtos angle-deg 2 0) "deg"))
     
-    ;; 임시 POINT 생성 (entmake 사용)
-    (entmake
-      (list
-        '(0 . "POINT")
-        (cons 10 mid-pt)
-        '(8 . "_토류판(timber)")  ; 레이어 지정
+    ;; C.T.C 간격 (mm 단위)
+    (setq ctc-mm (* ctc 1000.0))
+    
+    ;; 중점에서 양쪽으로 몇 개씩 배치 가능한지 계산
+    (setq half-length (/ seg-length 2.0))
+    (setq num-left (fix (/ half-length ctc-mm)))   ; 왼쪽 개수
+    (setq num-right (fix (/ half-length ctc-mm)))  ; 오른쪽 개수
+    
+    (princ (strcat "\n  C.T.C=" (rtos ctc-mm 2 0) "mm, 중점 기준 좌=" (itoa num-left) "개, 우=" (itoa num-right) "개"))
+    (debug-log (strcat "C.T.C=" (rtos ctc-mm 2 0) "mm, 좌=" (itoa num-left) "개, 우=" (itoa num-right) "개"))
+    
+    ;; 포인트 리스트 생성
+    (setq point-list '())
+    
+    ;; 왼쪽 방향 (음수 거리)
+    (setq i num-left)
+    (while (>= i 1)
+      (setq dist (* i ctc-mm -1.0))
+      (setq new-pt (polar mid-pt seg-angle dist))
+      
+      ;; 세그먼트 범위 체크
+      (setq dist-from-pt1 (distance pt1 new-pt))
+      (setq dist-from-pt2 (distance pt2 new-pt))
+      
+      ;; pt1과 pt2 사이에 있는지 확인 (거리 합이 선분 길이와 거의 같으면 선분 위)
+      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
+        (setq point-list (append point-list (list new-pt)))
       )
+      
+      (setq i (1- i))
     )
-    (debug-log (strcat "POINT 생성: " (vl-princ-to-string mid-pt)))
     
-    (princ (strcat "\n  선분 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ") 각도=" (rtos angle-deg 2 0) "deg"))
+    ;; 중점 추가
+    (setq point-list (append point-list (list mid-pt)))
     
-    ;; 토류판 블록 배치 - entmake 사용 (command 대신)
-    (setq new-insert 
+    ;; 오른쪽 방향 (양수 거리)
+    (setq i 1)
+    (while (<= i num-right)
+      (setq dist (* i ctc-mm))
+      (setq new-pt (polar mid-pt seg-angle dist))
+      
+      ;; 세그먼트 범위 체크
+      (setq dist-from-pt1 (distance pt1 new-pt))
+      (setq dist-from-pt2 (distance pt2 new-pt))
+      
+      ;; pt1과 pt2 사이에 있는지 확인
+      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
+        (setq point-list (append point-list (list new-pt)))
+      )
+      
+      (setq i (1+ i))
+    )
+    
+    (princ (strcat "\n  생성된 포인트 개수: " (itoa (length point-list))))
+    (debug-log (strcat "생성된 포인트 개수: " (itoa (length point-list))))
+    
+    ;; 각 포인트에 POINT 생성 + 토류판 배치
+    (foreach pt point-list
+      ;; POINT 생성
       (entmake
         (list
-          '(0 . "INSERT")
-          (cons 2 timber-block)  ; 블록 이름
-          (cons 8 "_토류판(timber)")  ; 레이어
-          (cons 10 mid-pt)  ; 삽입점
-          '(41 . 1.0)  ; X 스케일
-          '(42 . 1.0)  ; Y 스케일
-          '(43 . 1.0)  ; Z 스케일
-          (cons 50 seg-angle)  ; 회전 각도 (라디안)
+          '(0 . "POINT")
+          (cons 10 pt)
+          '(8 . "_토류판(timber)")
         )
       )
-    )
-    (if new-insert
-      (debug-log (strcat "토류판 배치 완료: " (vl-princ-to-string mid-pt) " 각도=" (rtos angle-deg 2 0)))
-      (debug-log (strcat "토류판 배치 실패: " (vl-princ-to-string mid-pt)))
+      (debug-log (strcat "POINT 생성: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
+      
+      ;; 토류판 블록 배치
+      (setq new-insert 
+        (entmake
+          (list
+            '(0 . "INSERT")
+            (cons 2 timber-block)
+            (cons 8 "_토류판(timber)")
+            (cons 10 pt)
+            '(41 . 1.0)
+            '(42 . 1.0)
+            '(43 . 1.0)
+            (cons 50 seg-angle)
+          )
+        )
+      )
+      (if new-insert
+        (debug-log (strcat "토류판 배치: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
+        (debug-log (strcat "토류판 배치 실패: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
+      )
     )
   )
+  
+  (princ "\n\n토류판 배치 완료!")
+  (debug-log "=== 3단계 완료 ===")
   
   ;; ===== 4단계: H-Pile 배치 (기존 로직 유지) =====
   (princ "\n\n[4단계] H-Pile 배치는 추후 구현...")
