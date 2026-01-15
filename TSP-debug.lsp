@@ -1347,7 +1347,7 @@
 ;;; ----------------------------------------------------------------------
 
 ;; 토류판 블록 생성 (해치 포함)
-(defun create-timber-panel-block (width height / timber-pline hatch-ent block-name half-width half-height timber-obj doc mspace hatch-obj sa)
+(defun create-timber-panel-block (width height / timber-pline hatch-ent block-name half-width half-height timber-obj doc mspace hatch-obj sa old-ucs old-osnap)
   ;; width: 토류판 수평 길이 (C.T.C - 50mm)
   ;; height: 토류판 높이 (thickness, 예: 60mm)
   
@@ -1371,6 +1371,17 @@
     )
     (progn
       ;; 블록이 없으면 생성
+      
+      ;; ===== UCS/OSNAP 저장 및 WCS로 변경 =====
+      (setq old-ucs (getvar "UCSNAME"))
+      (setq old-osnap (getvar "OSMODE"))
+      (debug-log (strcat "기존 UCS: " (if old-ucs old-ucs "WORLD") ", OSNAP: " (itoa old-osnap)))
+      
+      ;; UCS를 World로 변경
+      (command "._UCS" "_W")
+      ;; OSNAP 끄기
+      (setvar "OSMODE" 0)
+      (debug-log "UCS → WORLD, OSNAP → OFF")
   
   ;; 토류판 폴리라인 생성 (원점 기준, 중심이 원점)
   ;; 토류판 중심을 (0,0)으로 하기 위해 좌표 조정
@@ -1433,13 +1444,22 @@
       )
       
       (debug-log (strcat "토류판 블록 생성 완료: " block-name))
+      
+      ;; ===== UCS/OSNAP 복원 =====
+      (if old-ucs
+        (command "._UCS" "_R" old-ucs)
+        (command "._UCS" "_W")
+      )
+      (setvar "OSMODE" old-osnap)
+      (debug-log "UCS/OSNAP 복원 완료")
+      
       block-name
     )
   )
 )
 
 ;; H-Pile 블록 생성
-(defun create-hpile-section-block (h b tw tf / hpile-ent block-name)
+(defun create-hpile-section-block (h b tw tf / hpile-ent block-name old-ucs old-osnap)
   ;; h: 높이, b: 폭, tw: 웹 두께, tf: 플랜지 두께
   
   (debug-log "=== create-hpile-section-block 시작 ===")
@@ -1464,6 +1484,17 @@
     )
     (progn
       ;; 블록이 없으면 생성
+      
+      ;; ===== UCS/OSNAP 저장 및 WCS로 변경 =====
+      (setq old-ucs (getvar "UCSNAME"))
+      (setq old-osnap (getvar "OSMODE"))
+      (debug-log (strcat "기존 UCS: " (if old-ucs old-ucs "WORLD") ", OSNAP: " (itoa old-osnap)))
+      
+      ;; UCS를 World로 변경
+      (command "._UCS" "_W")
+      ;; OSNAP 끄기
+      (setvar "OSMODE" 0)
+      (debug-log "UCS → WORLD, OSNAP → OFF")
   
       ;; H-Pile 단면 생성 (원점 기준)
       (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
@@ -1478,6 +1509,15 @@
       )
       
       (debug-log (strcat "H-Pile 블록 생성 완료: " block-name))
+      
+      ;; ===== UCS/OSNAP 복원 =====
+      (if old-ucs
+        (command "._UCS" "_R" old-ucs)
+        (command "._UCS" "_W")
+      )
+      (setvar "OSMODE" old-osnap)
+      (debug-log "UCS/OSNAP 복원 완료")
+      
       block-name
     )
   )
