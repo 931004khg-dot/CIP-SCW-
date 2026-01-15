@@ -1352,18 +1352,25 @@
   ;; height: 토류판 높이 (thickness, 예: 60mm)
   
   (debug-log "=== create-timber-panel-block 시작 ===")
-  (setq block-name "_TIMBER_PANEL_BLOCK")
+  
+  ;; 블록명에 규격 포함 (간단한 형식)
+  (setq block-name (strcat "_TIMBER(" 
+                           (itoa (fix width)) "x" 
+                           (itoa (fix height)) ")"))
+  
+  (debug-log (strcat "블록명: " block-name))
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_토류판(timber)" "1")
   
-  ;; 블록이 이미 있으면 삭제
+  ;; 블록이 이미 존재하는지 확인
   (if (tblsearch "BLOCK" block-name)
     (progn
-      (command "._-PURGE" "_B" block-name "_N")
-      (debug-log "기존 토류판 블록 삭제")
+      (debug-log "블록이 이미 존재함, 재사용")
+      block-name  ; 블록명 반환
     )
-  )
+    (progn
+      ;; 블록이 없으면 생성
   
   ;; 토류판 폴리라인 생성 (원점 기준, 중심이 원점)
   ;; 토류판 중심을 (0,0)으로 하기 위해 좌표 조정
@@ -1413,20 +1420,22 @@
   ;; 해치 평가
   (vla-evaluate hatch-obj)
   
-  (setq hatch-ent (vlax-vla-object->ename hatch-obj))
-  (debug-log "해치 생성 완료 (VLA)")
-  
-  ;; 블록 생성
-  (command "._-BLOCK"
-    block-name    ; 블록명
-    "0,0"         ; 기준점 (원점)
-    timber-pline  ; 토류판 폴리라인
-    hatch-ent     ; 해치
-    ""
+      (setq hatch-ent (vlax-vla-object->ename hatch-obj))
+      (debug-log "해치 생성 완료 (VLA)")
+      
+      ;; 블록 생성
+      (command "._-BLOCK"
+        block-name    ; 블록명
+        "0,0"         ; 기준점 (원점)
+        timber-pline  ; 토류판 폴리라인
+        hatch-ent     ; 해치
+        ""
+      )
+      
+      (debug-log (strcat "토류판 블록 생성 완료: " block-name))
+      block-name
+    )
   )
-  
-  (debug-log (strcat "토류판 블록 생성 완료: " block-name))
-  block-name
 )
 
 ;; H-Pile 블록 생성
@@ -1434,33 +1443,44 @@
   ;; h: 높이, b: 폭, tw: 웹 두께, tf: 플랜지 두께
   
   (debug-log "=== create-hpile-section-block 시작 ===")
-  (setq block-name "_HPILE_SECTION_BLOCK")
+  
+  ;; 블록명에 규격 포함 (간단한 형식)
+  (setq block-name (strcat "_HPILE(" 
+                           (itoa h) "x" 
+                           (itoa b) "x" 
+                           (itoa tw) "x" 
+                           (itoa tf) ")"))
+  
+  (debug-log (strcat "블록명: " block-name))
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_측면말뚝" "3")
   
-  ;; 블록이 이미 있으면 삭제
+  ;; 블록이 이미 존재하는지 확인
   (if (tblsearch "BLOCK" block-name)
     (progn
-      (command "._-PURGE" "_B" block-name "_N")
-      (debug-log "기존 H-Pile 블록 삭제")
+      (debug-log "블록이 이미 존재함, 재사용")
+      block-name  ; 블록명 반환
+    )
+    (progn
+      ;; 블록이 없으면 생성
+  
+      ;; H-Pile 단면 생성 (원점 기준)
+      (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
+      (debug-log "H-Pile 단면 생성 완료")
+      
+      ;; 블록 생성
+      (command "._-BLOCK"
+        block-name    ; 블록명
+        "0,0"         ; 기준점 (원점)
+        hpile-ent     ; H-Pile 단면
+        ""
+      )
+      
+      (debug-log (strcat "H-Pile 블록 생성 완료: " block-name))
+      block-name
     )
   )
-  
-  ;; H-Pile 단면 생성 (원점 기준)
-  (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
-  (debug-log "H-Pile 단면 생성 완료")
-  
-  ;; 블록 생성
-  (command "._-BLOCK"
-    block-name    ; 블록명
-    "0,0"         ; 기준점 (원점)
-    hpile-ent     ; H-Pile 단면
-    ""
-  )
-  
-  (debug-log (strcat "H-Pile 블록 생성 완료: " block-name))
-  block-name
 )
 
 ;;; ----------------------------------------------------------------------
@@ -1470,8 +1490,8 @@
 ;; 경계선을 따라 H-Pile+토류판 배치
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
   h b tw tf hpile-values total-length num-segments seg-list i pt1 pt2 
-  seg-length seg-mid seg-angle positions j pos timber-pt hpile-left hpile-right
-  placed-hpiles dist-ok timber-block hpile-block timber-width half-h 
+  seg-length seg-mid seg-angle positions j timber-pt hpile-left hpile-right
+  timber-block hpile-block timber-width half-h 
   perp-angle timber-offset hpile-offset boundary-pt adjusted-pos)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 ===")
@@ -1517,9 +1537,6 @@
   
   (princ (strcat "\n세그먼트 개수: " (itoa num-segments)))
   
-  ;; 이미 배치된 H-Pile 위치 추적 (중복 방지)
-  (setq placed-hpiles '())
-  
   ;; 각 세그먼트 처리
   (setq i 0)
   (while (< i num-segments)
@@ -1550,6 +1567,9 @@
       
       ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
       (setq timber-pt (polar boundary-pt perp-angle timber-offset))
+      
+      ;; 토류판 레이어로 변경
+      (command "._LAYER" "_S" "_토류판(timber)" "")
       (command "._INSERT" 
         timber-block
         timber-pt
@@ -1558,53 +1578,31 @@
         (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
       )
       
-      ;; H-Pile 좌측 배치: 경계선에서 수직으로 hpile-offset만큼 위로, 그 다음 좌측으로 timber-width/2
+      ;; H-Pile 좌측 배치
       (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
       (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
       
-      ;; 중복 체크
-      (setq dist-ok T)
-      (foreach placed-pt placed-hpiles
-        (if (< (distance hpile-left placed-pt) 10)  ; 10mm 이내는 중복
-          (setq dist-ok nil)
-        )
+      ;; H-Pile 레이어로 변경
+      (command "._LAYER" "_S" "_측면말뚝" "")
+      (command "._INSERT" 
+        hpile-block
+        hpile-left
+        1
+        1
+        (/ (* seg-angle 180) pi)
       )
       
-      (if dist-ok
-        (progn
-          (command "._INSERT" 
-            hpile-block
-            hpile-left
-            1
-            1
-            (/ (* seg-angle 180) pi)
-          )
-          (setq placed-hpiles (append placed-hpiles (list hpile-left)))
-        )
-      )
-      
-      ;; H-Pile 우측 배치: 경계선에서 수직으로 hpile-offset만큼 위로, 그 다음 우측으로 timber-width/2
+      ;; H-Pile 우측 배치
       (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
       
-      ;; 중복 체크
-      (setq dist-ok T)
-      (foreach placed-pt placed-hpiles
-        (if (< (distance hpile-right placed-pt) 10)
-          (setq dist-ok nil)
-        )
-      )
-      
-      (if dist-ok
-        (progn
-          (command "._INSERT" 
-            hpile-block
-            hpile-right
-            1
-            1
-            (/ (* seg-angle 180) pi)
-          )
-          (setq placed-hpiles (append placed-hpiles (list hpile-right)))
-        )
+      ;; H-Pile 레이어로 변경 (이미 _측면말뚝이지만 명시적으로)
+      (command "._LAYER" "_S" "_측면말뚝" "")
+      (command "._INSERT" 
+        hpile-block
+        hpile-right
+        1
+        1
+        (/ (* seg-angle 180) pi)
       )
       
       (setq j (1+ j))
