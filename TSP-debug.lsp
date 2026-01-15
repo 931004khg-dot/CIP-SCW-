@@ -1652,7 +1652,7 @@
 )
 
 ;; 세그먼트 위에 C.T.C 간격으로 위치 계산
-(defun calculate-positions-on-segment (pt1 pt2 ctc / seg-length seg-mid positions 
+(defun calculate-positions-on-segment (pt1 pt2 ctc / seg-length seg-mid seg-angle positions 
   num-left num-right total-num i dist pos)
   
   (setq seg-length (distance pt1 pt2))
