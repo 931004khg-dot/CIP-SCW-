@@ -235,6 +235,21 @@
     (write-line "        value = \"2\";" dcl-file)
     (write-line "      }" dcl-file)
     (write-line "    }" dcl-file)
+    (write-line "    : spacer { height = 0.5; }" dcl-file)
+    (write-line "    : row {" dcl-file)
+    (write-line "      : text {" dcl-file)
+    (write-line "        label = \"토류판 두께 (mm)\";" dcl-file)
+    (write-line "        width = 10;" dcl-file)
+    (write-line "      }" dcl-file)
+    (write-line "      : edit_box {" dcl-file)
+    (write-line "        key = \"timber_thickness\";" dcl-file)
+    (write-line "        label = \"\";" dcl-file)
+    (write-line "        width = 5;" dcl-file)
+    (write-line "        fixed_width = true;" dcl-file)
+    (write-line "        edit_width = 5;" dcl-file)
+    (write-line "        value = \"60\";" dcl-file)
+    (write-line "      }" dcl-file)
+    (write-line "    }" dcl-file)
     (write-line "  }" dcl-file)
       (write-line "  : spacer { height = 1.0; }" dcl-file)
       (write-line "  : row {" dcl-file)
@@ -315,7 +330,7 @@
 )
 
 ;; create-wale-offsets 재정의
-(defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4 ent-data ent-type first-vertex inside-pt wale-values)
+(defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4 wale-values boundary-vla obj2-vla obj3-vla obj4-vla original-area offset-area)
   (debug-log "=== create-wale-offsets 시작 ===")
   (debug-log (strcat "wale-spec: " wale-spec))
   
@@ -352,56 +367,202 @@
   (setq obj1 (entlast))
   (command "._CHPROP" obj1 "" "_LA" "_띠장(wale)" "_C" "3" "")
   
-  ;; 경계선의 내부 점 찾기 (바운딩 박스 중심 사용)
-  (setq ent-data (entget boundary-ent))
-  (setq ent-type (cdr (assoc 0 ent-data)))
+  ;; VLA-OFFSET을 사용한 자동 오프셋 (사용자 입력 불필요)
+  (setq boundary-vla (vlax-ename->vla-object boundary-ent))
   
-  ;; 바운딩 박스를 사용하여 중심점 계산
-  (command "._ZOOM" "_E" boundary-ent "")
-  (setq bbox (vl-catch-all-apply 'vla-getboundingbox 
-    (list (vlax-ename->vla-object boundary-ent) 
-          'minpt 'maxpt)))
+  ;; 경계선의 면적 계산 (비교용)
+  (setq original-area (vla-get-area boundary-vla))
+  (princ (strcat "\n원본 경계선 면적: " (rtos original-area 2 2)))
+  (debug-log (strcat "원본 경계선 면적: " (rtos original-area 2 2)))
   
-  (if (not (vl-catch-all-error-p bbox))
+  ;; 객체 2: tf 옵셋 - 빨간색 (안쪽)
+  ;; 음수 오프셋 = 안쪽, 양수 오프셋 = 바깥쪽
+  (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- tf))))
+  
+  (if (vl-catch-all-error-p obj2-vla)
     (progn
-      ;; 바운딩 박스 중심점 계산
-      (setq minpt (vlax-safearray->list minpt))
-      (setq maxpt (vlax-safearray->list maxpt))
-      (setq inside-pt (list 
-        (/ (+ (car minpt) (car maxpt)) 2.0)
-        (/ (+ (cadr minpt) (cadr maxpt)) 2.0)
-      ))
-      (princ (strcat "\n바운딩 박스 중심: (" (rtos (car inside-pt) 2 2) ", " (rtos (cadr inside-pt) 2 2) ")"))
-      (debug-log (strcat "바운딩 박스 중심: (" (rtos (car inside-pt) 2 2) ", " (rtos (cadr inside-pt) 2 2) ")"))
-    )
-    ;; 바운딩 박스를 가져올 수 없는 경우, 첫 정점 기준으로 계산
-    (progn
-      (setq first-vertex (cdr (assoc 10 ent-data)))
-      (setq inside-pt (list (+ (car first-vertex) 100) (+ (cadr first-vertex) 100)))
-      (princ "\n[Warning] 바운딩 박스 계산 실패, 대체 방법 사용")
-      (debug-log "WARNING: 바운딩 박스 계산 실패, 대체 방법 사용")
+      ;; 음수 오프셋 실패 시 양수로 시도
+      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
+      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
+      (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla tf)))
     )
   )
   
-  ;; 객체 2: tf 옵셋 - 빨간색 (안쪽)
-  (command "._OFFSET" tf boundary-ent inside-pt "")
-  (setq obj2 (entlast))
-  (if obj2
-    (command "._CHPROP" obj2 "" "_LA" "_띠장(wale)" "_C" "1" "")
+  (if (not (vl-catch-all-error-p obj2-vla))
+    (progn
+      ;; VLA-OFFSET은 variant를 반환하므로 vlax-variant-value로 추출
+      (if (= (type obj2-vla) 'variant)
+        (setq obj2-vla (vlax-variant-value obj2-vla))
+      )
+      ;; safearray인 경우 리스트로 변환
+      (if (= (type obj2-vla) 'safearray)
+        (setq obj2-vla (vlax-safearray->list obj2-vla))
+      )
+      ;; 리스트인 경우 첫 번째 요소 추출
+      (if (= (type obj2-vla) 'list)
+        (setq obj2-vla (car obj2-vla))
+      )
+      
+      (setq obj2 (vlax-vla-object->ename obj2-vla))
+      (setq offset-area (vla-get-area obj2-vla))
+      (princ (strcat "\ntf 옵셋 후 면적: " (rtos offset-area 2 2)))
+      (debug-log (strcat "tf 옵셋 후 면적: " (rtos offset-area 2 2)))
+      
+      ;; 면적이 작아지지 않았으면 바깥쪽으로 옵셋된 것 → 삭제 후 반대 방향으로 재시도
+      (if (>= offset-area original-area)
+        (progn
+          (princ "\n[Warning] tf 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
+          (debug-log "WARNING: tf 옵셋이 바깥쪽, 반대 방향으로 재시도")
+          (vla-delete obj2-vla)
+          ;; 반대 방향으로 오프셋
+          (setq obj2-vla (vla-offset boundary-vla tf))
+          (if (= (type obj2-vla) 'variant)
+            (setq obj2-vla (vlax-variant-value obj2-vla))
+          )
+          (if (= (type obj2-vla) 'safearray)
+            (setq obj2-vla (vlax-safearray->list obj2-vla))
+          )
+          (if (= (type obj2-vla) 'list)
+            (setq obj2-vla (car obj2-vla))
+          )
+          (setq obj2 (vlax-vla-object->ename obj2-vla))
+          (setq offset-area (vla-get-area obj2-vla))
+          (princ (strcat "\ntf 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+          (debug-log (strcat "tf 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+        )
+      )
+      
+      (if obj2
+        (command "._CHPROP" obj2 "" "_LA" "_띠장(wale)" "_C" "1" "")
+      )
+    )
+    (progn
+      (princ "\n[Error] tf 옵셋 생성 실패")
+      (debug-log "ERROR: tf 옵셋 생성 실패")
+      (setq obj2 nil)
+    )
   )
   
   ;; 객체 3: (H - tf) 옵셋 - 빨간색 (안쪽)
-  (command "._OFFSET" (- h tf) boundary-ent inside-pt "")
-  (setq obj3 (entlast))
-  (if obj3
-    (command "._CHPROP" obj3 "" "_LA" "_띠장(wale)" "_C" "1" "")
+  (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- (- h tf)))))
+  
+  (if (vl-catch-all-error-p obj3-vla)
+    (progn
+      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
+      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
+      (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- h tf))))
+    )
+  )
+  
+  (if (not (vl-catch-all-error-p obj3-vla))
+    (progn
+      (if (= (type obj3-vla) 'variant)
+        (setq obj3-vla (vlax-variant-value obj3-vla))
+      )
+      (if (= (type obj3-vla) 'safearray)
+        (setq obj3-vla (vlax-safearray->list obj3-vla))
+      )
+      (if (= (type obj3-vla) 'list)
+        (setq obj3-vla (car obj3-vla))
+      )
+      
+      (setq obj3 (vlax-vla-object->ename obj3-vla))
+      (setq offset-area (vla-get-area obj3-vla))
+      (princ (strcat "\n(H-tf) 옵셋 후 면적: " (rtos offset-area 2 2)))
+      (debug-log (strcat "(H-tf) 옵셋 후 면적: " (rtos offset-area 2 2)))
+      
+      (if (>= offset-area original-area)
+        (progn
+          (princ "\n[Warning] (H-tf) 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
+          (debug-log "WARNING: (H-tf) 옵셋이 바깥쪽, 반대 방향으로 재시도")
+          (vla-delete obj3-vla)
+          (setq obj3-vla (vla-offset boundary-vla (- h tf)))
+          (if (= (type obj3-vla) 'variant)
+            (setq obj3-vla (vlax-variant-value obj3-vla))
+          )
+          (if (= (type obj3-vla) 'safearray)
+            (setq obj3-vla (vlax-safearray->list obj3-vla))
+          )
+          (if (= (type obj3-vla) 'list)
+            (setq obj3-vla (car obj3-vla))
+          )
+          (setq obj3 (vlax-vla-object->ename obj3-vla))
+          (setq offset-area (vla-get-area obj3-vla))
+          (princ (strcat "\n(H-tf) 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+          (debug-log (strcat "(H-tf) 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+        )
+      )
+      
+      (if obj3
+        (command "._CHPROP" obj3 "" "_LA" "_띠장(wale)" "_C" "1" "")
+      )
+    )
+    (progn
+      (princ "\n[Error] (H-tf) 옵셋 생성 실패")
+      (debug-log "ERROR: (H-tf) 옵셋 생성 실패")
+      (setq obj3 nil)
+    )
   )
   
   ;; 객체 4: H 옵셋 - 초록색 (안쪽)
-  (command "._OFFSET" h boundary-ent inside-pt "")
-  (setq obj4 (entlast))
-  (if obj4
-    (command "._CHPROP" obj4 "" "_LA" "_띠장(wale)" "_C" "3" "")
+  (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- h))))
+  
+  (if (vl-catch-all-error-p obj4-vla)
+    (progn
+      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
+      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
+      (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla h)))
+    )
+  )
+  
+  (if (not (vl-catch-all-error-p obj4-vla))
+    (progn
+      (if (= (type obj4-vla) 'variant)
+        (setq obj4-vla (vlax-variant-value obj4-vla))
+      )
+      (if (= (type obj4-vla) 'safearray)
+        (setq obj4-vla (vlax-safearray->list obj4-vla))
+      )
+      (if (= (type obj4-vla) 'list)
+        (setq obj4-vla (car obj4-vla))
+      )
+      
+      (setq obj4 (vlax-vla-object->ename obj4-vla))
+      (setq offset-area (vla-get-area obj4-vla))
+      (princ (strcat "\nH 옵셋 후 면적: " (rtos offset-area 2 2)))
+      (debug-log (strcat "H 옵셋 후 면적: " (rtos offset-area 2 2)))
+      
+      (if (>= offset-area original-area)
+        (progn
+          (princ "\n[Warning] H 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
+          (debug-log "WARNING: H 옵셋이 바깥쪽, 반대 방향으로 재시도")
+          (vla-delete obj4-vla)
+          (setq obj4-vla (vla-offset boundary-vla h))
+          (if (= (type obj4-vla) 'variant)
+            (setq obj4-vla (vlax-variant-value obj4-vla))
+          )
+          (if (= (type obj4-vla) 'safearray)
+            (setq obj4-vla (vlax-safearray->list obj4-vla))
+          )
+          (if (= (type obj4-vla) 'list)
+            (setq obj4-vla (car obj4-vla))
+          )
+          (setq obj4 (vlax-vla-object->ename obj4-vla))
+          (setq offset-area (vla-get-area obj4-vla))
+          (princ (strcat "\nH 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+          (debug-log (strcat "H 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+        )
+      )
+      
+      (if obj4
+        (command "._CHPROP" obj4 "" "_LA" "_띠장(wale)" "_C" "3" "")
+      )
+    )
+    (progn
+      (princ "\n[Error] H 옵셋 생성 실패")
+      (debug-log "ERROR: H 옵셋 생성 실패")
+      (setq obj4 nil)
+    )
   )
   
   (debug-log "=== create-wale-offsets 완료 ===")
@@ -538,6 +699,9 @@
            ;; C.T.C 저장
            (setq *tsp-ctc* (atof (get_tile \"ctc\")))
            
+           ;; 토류판 두께 저장
+           (setq *tsp-timber-thickness* (atoi (get_tile \"timber_thickness\")))
+           
            (done_dialog 1)
          )"
       )
@@ -659,7 +823,8 @@
          (princ "\n설정 완료!")
          (princ (strcat "\n- H-Pile 규격: " *tsp-hpile-spec*))
          (princ (strcat "\n- 띠장 규격: " *tsp-wale-spec*))
-         (princ (strcat "\n- C.T.C: " (rtos *tsp-ctc* 2 2) "m\n"))
+         (princ (strcat "\n- C.T.C: " (rtos *tsp-ctc* 2 2) "m"))
+         (princ (strcat "\n- 토류판 두께: " (itoa *tsp-timber-thickness*) "mm\n"))
          
          ;; 경계선 선택
          (princ "\n경계선을 선택하세요 (Polyline 또는 Line): ")
@@ -818,9 +983,9 @@
           (debug-log (strcat "H-Pile 중심 (조정 후): (" (rtos (car offset-pt) 2 2) ", " (rtos (cadr offset-pt) 2 2) ")"))
           (debug-log (strcat "하단 플랜지 Y 좌표: " (rtos (cadr mid-pt) 2 2) " (경계선)"))
           
-          ;; H-Pile 세트 생성 (조정된 중심점 사용)
-          (create-hpile-set offset-pt hpile-spec ctc)
-          (debug-log "=== create-hpile-set-on-boundary 완료 ===")
+          ;; 경계선 전체에 H-Pile+토류판 배치
+          (place-hpile-timber-along-boundary boundary-ent hpile-spec ctc *tsp-timber-thickness*)
+          (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
         )
         (progn
           (princ "\n[ERROR] H-Pile 규격 파싱 실패!")
@@ -957,7 +1122,7 @@
 )
 
 ;; create-timber-panel 재정의
-(defun create-timber-panel (pt1 pt2 width h tf / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy half-h flange-top-y panel-height)
+(defun create-timber-panel (pt1 pt2 width h tf / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy half-h flange-top-y panel-height timber-obj doc mspace hatch-obj)
   ;; pt1, pt2: H-Pile 중심점
   ;; width: 토류판 두께 (70mm)
   ;; h: H-Pile 높이 (mm)
@@ -970,8 +1135,8 @@
   (setq half-h (/ h 2.0))
   (setq flange-top-y (- (cadr pt1) (- half-h tf)))  ; cy - (half-h - tf)
   
-  ;; 토류판 높이 (기본 1000mm)
-  (setq panel-height 1000.0)
+  ;; 토류판 높이 = 토류판 두께 = width (70mm)
+  (setq panel-height width)
   
   (princ (strcat "\n[토류판] H-Pile 하단 플랜지 상단 Y: " (rtos flange-top-y 2 2)))
   (princ (strcat "\n[토류판] 토류판 하단 Y: " (rtos flange-top-y 2 2)))
@@ -1056,11 +1221,13 @@
   ;; 해치 생성
   (if pline-ent
     (progn
-      (debug-log "해치 생성 시작 (ANSI36, 축척 30)")
+      (debug-log "해치 생성 시작 (ANSI36, 축척 30, 레이어 _토류판(timber), 색상 9)")
       (command "._-BHATCH"
         "_P" "ANSI36"
         "30"
         "0"
+        "_LA" "_토류판(timber)"  ; 레이어 설정
+        "_C" "9"                  ; 색상 9번 (회색)
         "_SEL" pline-ent ""
         ""
       )
@@ -1123,6 +1290,10 @@
   ;; 두 번째 H-Pile 중심점 계산 (수평 방향으로 C.T.C 거리)
   (setq pt2 (list (+ (car pt1) (* ctc 1000)) (cadr pt1)))
   
+  ;; 토류판 생성 (먼저 생성하여 H-Pile 아래에 배치)
+  (princ "\n토류판 생성...")
+  (setq timber (create-timber-panel pt1 pt2 *tsp-timber-thickness* h tf))
+  
   ;; 첫 번째 H-Pile 생성
   (princ "\n첫 번째 H-Pile 생성...")
   (setq hpile1 (create-hpile-section pt1 h b tw tf layer-name))
@@ -1131,14 +1302,338 @@
   (princ "\n두 번째 H-Pile 생성...")
   (setq hpile2 (create-hpile-section pt2 h b tw tf layer-name))
   
-  ;; 토류판 생성
-  (princ "\n토류판 생성...")
-  (setq timber (create-timber-panel pt1 pt2 70 h tf))
-  
   (princ "\nH-Pile 세트 생성 완료!")
   (debug-log "=== create-hpile-set 완료 ===")
   
   (list hpile1 hpile2 timber)
+)
+
+;;; ----------------------------------------------------------------------
+;;; 블록 생성 함수
+;;; ----------------------------------------------------------------------
+
+;; 토류판 블록 생성 (해치 포함)
+(defun create-timber-panel-block (width height / timber-pline hatch-ent block-name half-width half-height timber-obj doc mspace hatch-obj)
+  ;; width: 토류판 수평 길이 (C.T.C - 50mm)
+  ;; height: 토류판 높이 (thickness, 예: 60mm)
+  
+  (debug-log "=== create-timber-panel-block 시작 ===")
+  (setq block-name "_TIMBER_PANEL_BLOCK")
+  
+  ;; 레이어 생성
+  (create-layer-if-not-exists "_토류판(timber)" "1")
+  
+  ;; 블록이 이미 있으면 삭제
+  (if (tblsearch "BLOCK" block-name)
+    (progn
+      (command "._-PURGE" "_B" block-name "_N")
+      (debug-log "기존 토류판 블록 삭제")
+    )
+  )
+  
+  ;; 토류판 폴리라인 생성 (원점 기준, 중심이 원점)
+  ;; 토류판 중심을 (0,0)으로 하기 위해 좌표 조정
+  (setq half-width (/ width 2.0))
+  (setq half-height (/ height 2.0))
+  
+  (entmake
+    (list
+      '(0 . "LWPOLYLINE")
+      '(100 . "AcDbEntity")
+      '(8 . "_토류판(timber)")  ; 레이어
+      '(62 . 1)  ; 색상: 빨강
+      '(100 . "AcDbPolyline")
+      '(90 . 4)  ; 정점 개수
+      '(70 . 1)  ; 닫힘 플래그
+      (cons 10 (list (- half-width) (- half-height)))  ; 좌하
+      (cons 10 (list half-width (- half-height)))      ; 우하
+      (cons 10 (list half-width half-height))          ; 우상
+      (cons 10 (list (- half-width) half-height))      ; 좌상
+    )
+  )
+  
+  (setq timber-pline (entlast))
+  (debug-log "토류판 폴리라인 생성 완료")
+  
+  ;; 해치 생성 (VLA 방식)
+  (setq timber-obj (vlax-ename->vla-object timber-pline))
+  (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+  (setq mspace (vla-get-modelspace doc))
+  
+  ;; 해치 객체 생성 (PatternType: 0 = User-defined, 1 = Predefined, 2 = Custom)
+  (setq hatch-obj (vla-addhatch mspace 1 "ANSI36" :vlax-true))
+  
+  ;; 해치 패턴 속성 설정
+  (vla-put-patternscale hatch-obj 30.0)
+  (vla-put-patternangle hatch-obj 0.0)
+  (vla-put-layer hatch-obj "_토류판(timber)")
+  (vla-put-color hatch-obj 9)
+  
+  ;; 외부 경계 추가
+  (vla-appendouterloop hatch-obj (vlax-make-safearray vlax-vbObject (cons 0 0) (list timber-obj)))
+  
+  ;; 해치 평가
+  (vla-evaluate hatch-obj)
+  
+  (setq hatch-ent (vlax-vla-object->ename hatch-obj))
+  (debug-log "해치 생성 완료 (VLA)")
+  
+  ;; 블록 생성
+  (command "._-BLOCK"
+    block-name    ; 블록명
+    "0,0"         ; 기준점 (원점)
+    timber-pline  ; 토류판 폴리라인
+    hatch-ent     ; 해치
+    ""
+  )
+  
+  (debug-log (strcat "토류판 블록 생성 완료: " block-name))
+  block-name
+)
+
+;; H-Pile 블록 생성
+(defun create-hpile-section-block (h b tw tf / hpile-ent block-name)
+  ;; h: 높이, b: 폭, tw: 웹 두께, tf: 플랜지 두께
+  
+  (debug-log "=== create-hpile-section-block 시작 ===")
+  (setq block-name "_HPILE_SECTION_BLOCK")
+  
+  ;; 레이어 생성
+  (create-layer-if-not-exists "_측면말뚝" "3")
+  
+  ;; 블록이 이미 있으면 삭제
+  (if (tblsearch "BLOCK" block-name)
+    (progn
+      (command "._-PURGE" "_B" block-name "_N")
+      (debug-log "기존 H-Pile 블록 삭제")
+    )
+  )
+  
+  ;; H-Pile 단면 생성 (원점 기준)
+  (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
+  (debug-log "H-Pile 단면 생성 완료")
+  
+  ;; 블록 생성
+  (command "._-BLOCK"
+    block-name    ; 블록명
+    "0,0"         ; 기준점 (원점)
+    hpile-ent     ; H-Pile 단면
+    ""
+  )
+  
+  (debug-log (strcat "H-Pile 블록 생성 완료: " block-name))
+  block-name
+)
+
+;;; ----------------------------------------------------------------------
+;;; 경계선 따라 배치 함수
+;;; ----------------------------------------------------------------------
+
+;; 경계선을 따라 H-Pile+토류판 배치
+(defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
+  h b tw tf hpile-values total-length num-segments seg-list i pt1 pt2 
+  seg-length seg-mid seg-angle positions j pos timber-pt hpile-left hpile-right
+  placed-hpiles dist-ok timber-block hpile-block timber-width)
+  
+  (debug-log "=== place-hpile-timber-along-boundary 시작 ===")
+  
+  ;; H-Pile 규격 파싱
+  (if (= hpile-spec "User-defined")
+    (setq hpile-values *tsp-hpile-custom*)
+    (setq hpile-values (parse-h-spec hpile-spec))
+  )
+  
+  (setq h (nth 0 hpile-values))
+  (setq b (nth 1 hpile-values))
+  (setq tw (nth 2 hpile-values))
+  (setq tf (nth 3 hpile-values))
+  
+  (princ (strcat "\n경계선 따라 배치 시작..."))
+  (princ (strcat "\nH-Pile: H=" (rtos h 2 0) " B=" (rtos b 2 0) " tw=" (rtos tw 2 0) " tf=" (rtos tf 2 0)))
+  (princ (strcat "\nC.T.C: " (rtos (* ctc 1000) 2 0) "mm"))
+  (princ (strcat "\n토류판 두께: " (itoa timber-thickness) "mm"))
+  
+  ;; 토류판 블록 생성
+  (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
+  (setq timber-block (create-timber-panel-block timber-width timber-thickness))
+  
+  ;; H-Pile 블록 생성
+  (setq hpile-block (create-hpile-section-block h b tw tf))
+  
+  ;; 경계선의 각 세그먼트 추출
+  (setq seg-list (get-boundary-segments boundary-ent))
+  (setq num-segments (length seg-list))
+  
+  (princ (strcat "\n세그먼트 개수: " (itoa num-segments)))
+  
+  ;; 이미 배치된 H-Pile 위치 추적 (중복 방지)
+  (setq placed-hpiles '())
+  
+  ;; 각 세그먼트 처리
+  (setq i 0)
+  (while (< i num-segments)
+    (setq seg (nth i seg-list))
+    (setq pt1 (nth 0 seg))
+    (setq pt2 (nth 1 seg))
+    (setq seg-length (distance pt1 pt2))
+    (setq seg-mid (list 
+      (/ (+ (car pt1) (car pt2)) 2.0)
+      (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+    ))
+    (setq seg-angle (angle pt1 pt2))
+    
+    (debug-log (strcat "세그먼트 " (itoa (1+ i)) ": 길이=" (rtos seg-length 2 0) "mm"))
+    
+    ;; 세그먼트 중심에서 양쪽으로 C.T.C 간격으로 위치 계산
+    (setq positions (calculate-positions-on-segment pt1 pt2 (* ctc 1000)))
+    
+    (debug-log (strcat "배치 위치 개수: " (itoa (length positions))))
+    
+    ;; 각 위치에 토류판 + H-Pile 배치
+    (setq j 0)
+    (while (< j (length positions))
+      (setq pos (nth j positions))
+      
+      ;; 토류판 배치
+      (setq timber-pt pos)
+      (command "._INSERT" 
+        timber-block
+        timber-pt
+        1  ; X scale
+        1  ; Y scale
+        (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
+      )
+      
+      ;; H-Pile 좌측 배치 (토류판 왼쪽)
+      (setq hpile-left (polar pos seg-angle (- (/ timber-width 2.0))))
+      
+      ;; 중복 체크
+      (setq dist-ok T)
+      (foreach placed-pt placed-hpiles
+        (if (< (distance hpile-left placed-pt) 10)  ; 10mm 이내는 중복
+          (setq dist-ok nil)
+        )
+      )
+      
+      (if dist-ok
+        (progn
+          (command "._INSERT" 
+            hpile-block
+            hpile-left
+            1
+            1
+            (/ (* seg-angle 180) pi)
+          )
+          (setq placed-hpiles (append placed-hpiles (list hpile-left)))
+        )
+      )
+      
+      ;; H-Pile 우측 배치 (토류판 오른쪽)
+      (setq hpile-right (polar pos seg-angle (/ timber-width 2.0)))
+      
+      ;; 중복 체크
+      (setq dist-ok T)
+      (foreach placed-pt placed-hpiles
+        (if (< (distance hpile-right placed-pt) 10)
+          (setq dist-ok nil)
+        )
+      )
+      
+      (if dist-ok
+        (progn
+          (command "._INSERT" 
+            hpile-block
+            hpile-right
+            1
+            1
+            (/ (* seg-angle 180) pi)
+          )
+          (setq placed-hpiles (append placed-hpiles (list hpile-right)))
+        )
+      )
+      
+      (setq j (1+ j))
+    )
+    
+    (setq i (1+ i))
+  )
+  
+  (princ "\n배치 완료!")
+  (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
+)
+
+;; 경계선 세그먼트 추출
+(defun get-boundary-segments (ent / ent-data vertices seg-list i pt1 pt2)
+  (debug-log "=== get-boundary-segments 시작 ===")
+  
+  (setq ent-data (entget ent))
+  (setq vertices '())
+  
+  ;; 정점 추출
+  (foreach item ent-data
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
+    )
+  )
+  
+  ;; 세그먼트 생성 (폐합 처리)
+  (setq seg-list '())
+  (setq i 0)
+  (while (< i (length vertices))
+    (setq pt1 (nth i vertices))
+    (setq pt2 (if (= i (1- (length vertices)))
+                (nth 0 vertices)  ; 마지막 → 첫 번째 (폐합)
+                (nth (1+ i) vertices)
+              ))
+    (setq seg-list (append seg-list (list (list pt1 pt2))))
+    (setq i (1+ i))
+  )
+  
+  (debug-log (strcat "추출된 세그먼트 개수: " (itoa (length seg-list))))
+  seg-list
+)
+
+;; 세그먼트 위에 C.T.C 간격으로 위치 계산
+(defun calculate-positions-on-segment (pt1 pt2 ctc / seg-length seg-mid positions 
+  num-left num-right total-num i dist pos)
+  
+  (setq seg-length (distance pt1 pt2))
+  (setq seg-mid (list 
+    (/ (+ (car pt1) (car pt2)) 2.0)
+    (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+  ))
+  (setq seg-angle (angle pt1 pt2))
+  
+  ;; 중심에서 양쪽으로 몇 개씩 배치 가능한지 계산
+  (setq num-left (fix (/ (/ seg-length 2.0) ctc)))
+  (setq num-right num-left)
+  (setq total-num (+ num-left num-right 1))  ; 중심 포함
+  
+  ;; 위치 리스트 생성
+  (setq positions '())
+  
+  ;; 왼쪽 방향 (음수)
+  (setq i 1)
+  (while (<= i num-left)
+    (setq dist (* i ctc -1.0))
+    (setq pos (polar seg-mid seg-angle dist))
+    (setq positions (append positions (list pos)))
+    (setq i (1+ i))
+  )
+  
+  ;; 중심
+  (setq positions (append positions (list seg-mid)))
+  
+  ;; 오른쪽 방향 (양수)
+  (setq i 1)
+  (while (<= i num-right)
+    (setq dist (* i ctc))
+    (setq pos (polar seg-mid seg-angle dist))
+    (setq positions (append positions (list pos)))
+    (setq i (1+ i))
+  )
+  
+  positions
 )
 
 ;;; ----------------------------------------------------------------------
