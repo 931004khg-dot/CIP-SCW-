@@ -1642,8 +1642,14 @@
     ;; 선분 각도 계산
     (setq seg-angle (angle pt1 pt2))
     
-    ;; 임시 POINT 생성
-    (command "._POINT" mid-pt)
+    ;; 임시 POINT 생성 (entmake 사용)
+    (entmake
+      (list
+        '(0 . "POINT")
+        (cons 10 mid-pt)
+      )
+    )
+    (debug-log (strcat "POINT 생성: " (vl-princ-to-string mid-pt)))
     
     (princ (strcat "\n  선분 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "deg"))
     
@@ -1652,10 +1658,11 @@
     (command "._INSERT" 
       timber-block
       mid-pt
-      1  ; X scale
-      1  ; Y scale
+      ""  ; X scale (엔터로 기본값 1)
+      ""  ; Y scale (엔터로 기본값 1)
       (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
     )
+    (debug-log (strcat "토류판 배치 완료: " (vl-princ-to-string mid-pt) " 각도=" (rtos (/ (* seg-angle 180) pi) 2 0)))
   )
   
   ;; ===== 4단계: H-Pile 배치 (기존 로직 유지) =====
