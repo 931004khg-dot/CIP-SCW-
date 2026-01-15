@@ -1620,7 +1620,7 @@
 (defun place-hpile-at-corner (vertex lines h b tw tf hpile-block / 
   prev-line next-line prev-pt next-pt angle1 angle2 interior-angle 
   bisector-angle is-convex half-h half-b hpile-center hpile-rotation
-  line-ent line-data pt1 pt2)
+  flange-bottom-center line-ent line-data pt1 pt2)
   
   (debug-log (strcat "=== 모서리 H-Pile 배치: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ") ==="))
   
@@ -1715,6 +1715,20 @@
           (cons 50 hpile-rotation)
         )
       )
+      
+      ;; 아래 플랜지 중심에 POINT 생성 (시각적 확인용)
+      ;; 아래 플랜지 중심 = H-Pile 중심에서 회전 방향으로 half-h 이동
+      (setq flange-bottom-center (polar hpile-center hpile-rotation half-h))
+      
+      (entmake
+        (list
+          '(0 . "POINT")
+          '(8 . "_측면말뚝")
+          (cons 10 flange-bottom-center)
+        )
+      )
+      
+      (debug-log (strcat "아래 플랜지 중심 POINT: (" (rtos (car flange-bottom-center) 2 2) ", " (rtos (cadr flange-bottom-center) 2 2) ")"))
       
       (debug-log "H-Pile 배치 완료")
     )
