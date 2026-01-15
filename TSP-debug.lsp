@@ -1523,16 +1523,109 @@
   )
 )
 
+;; 토류판 개별 객체 생성 (블록 대신 직접 생성)
+(defun create-timber-panel-object (center-pt width height angle / half-width half-height cos-a sin-a pt1 pt2 pt3 pt4 timber-pline timber-obj doc mspace hatch-obj sa)
+  ;; center-pt: 중심점 (삽입점)
+  ;; width: 토류판 수평 길이 (C.T.C - 50mm)
+  ;; height: 토류판 높이 (thickness, 예: 60mm)
+  ;; angle: 회전 각도 (라디안)
+  
+  (setq half-width (/ width 2.0))
+  (setq half-height (/ height 2.0))
+  
+  ;; 회전 행렬 계산
+  (setq cos-a (cos angle))
+  (setq sin-a (sin angle))
+  
+  ;; 중심점 기준 4개 꼭지점 계산 (회전 적용)
+  ;; 좌하: (-half-width, -half-height)
+  (setq pt1 (list
+    (+ (car center-pt) (- (* (- half-width) cos-a) (* (- half-height) sin-a)))
+    (+ (cadr center-pt) (+ (* (- half-width) sin-a) (* (- half-height) cos-a)))
+    0.0
+  ))
+  
+  ;; 우하: (half-width, -half-height)
+  (setq pt2 (list
+    (+ (car center-pt) (- (* half-width cos-a) (* (- half-height) sin-a)))
+    (+ (cadr center-pt) (+ (* half-width sin-a) (* (- half-height) cos-a)))
+    0.0
+  ))
+  
+  ;; 우상: (half-width, half-height)
+  (setq pt3 (list
+    (+ (car center-pt) (- (* half-width cos-a) (* half-height sin-a)))
+    (+ (cadr center-pt) (+ (* half-width sin-a) (* half-height cos-a)))
+    0.0
+  ))
+  
+  ;; 좌상: (-half-width, half-height)
+  (setq pt4 (list
+    (+ (car center-pt) (- (* (- half-width) cos-a) (* half-height sin-a)))
+    (+ (cadr center-pt) (+ (* (- half-width) sin-a) (* half-height cos-a)))
+    0.0
+  ))
+  
+  ;; 폴리라인 생성
+  (entmake
+    (list
+      '(0 . "LWPOLYLINE")
+      '(100 . "AcDbEntity")
+      '(8 . "_토류판(timber)")
+      '(62 . 1)  ; 색상: 빨강
+      '(100 . "AcDbPolyline")
+      '(90 . 4)  ; 정점 개수
+      '(70 . 1)  ; 닫힘 플래그
+      (cons 10 (list (car pt1) (cadr pt1)))  ; 좌하
+      (cons 10 (list (car pt2) (cadr pt2)))  ; 우하
+      (cons 10 (list (car pt3) (cadr pt3)))  ; 우상
+      (cons 10 (list (car pt4) (cadr pt4)))  ; 좌상
+    )
+  )
+  
+  (setq timber-pline (entlast))
+  
+  ;; 해치 생성 (VLA 방식)
+  (if timber-pline
+    (progn
+      (setq timber-obj (vlax-ename->vla-object timber-pline))
+      (setq doc (vla-get-activedocument (vlax-get-acad-object)))
+      (setq mspace (vla-get-modelspace doc))
+      
+      ;; 해치 객체 생성
+      (setq hatch-obj (vla-addhatch mspace 1 "ANSI36" :vlax-true))
+      
+      ;; 해치 속성 설정
+      (vla-put-patternscale hatch-obj 30.0)
+      (vla-put-patternangle hatch-obj 0.0)
+      (vla-put-layer hatch-obj "_토류판(timber)")
+      (vla-put-color hatch-obj 9)
+      
+      ;; SafeArray 생성
+      (setq sa (vlax-make-safearray 9 (cons 0 0)))
+      (vlax-safearray-fill sa (list timber-obj))
+      
+      ;; 외부 경계 추가
+      (vla-appendouterloop hatch-obj sa)
+      
+      ;; 해치 평가
+      (vla-evaluate hatch-obj)
+    )
+  )
+  
+  timber-pline
+)
+
 ;;; ----------------------------------------------------------------------
 ;;; 경계선 따라 배치 함수
 ;;; ----------------------------------------------------------------------
 
 ;; 경계선을 따라 H-Pile+토류판 배치 (새로운 로직)
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
-  h b tw tf hpile-values timber-block hpile-block timber-width half-h 
+  h b tw tf hpile-values hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
   line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
-  last-before first-new current-ent ent-data new-insert delete-count
+  last-before first-new current-ent ent-data delete-count
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
   dist-from-pt1 dist-from-pt2 pt)
   
@@ -1567,10 +1660,9 @@
   (princ (strcat "\nH-Pile 오프셋: " (rtos hpile-offset 2 2) "mm (바깥쪽)"))
   (debug-log (strcat "H-Pile 오프셋: " (rtos hpile-offset 2 2) "mm"))
   
-  ;; 토류판 블록 생성
+  ;; 토류판 너비 계산
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
-  (setq timber-block (create-timber-panel-block timber-width timber-thickness))
-  (debug-log (strcat "토류판 블록: " timber-block))
+  (debug-log (strcat "토류판 너비: " (rtos timber-width 2 2) "mm"))
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
@@ -1747,7 +1839,7 @@
     (princ (strcat "\n  생성된 포인트 개수: " (itoa (length point-list))))
     (debug-log (strcat "생성된 포인트 개수: " (itoa (length point-list))))
     
-    ;; 각 포인트에 POINT 생성 + 토류판 배치
+    ;; 각 포인트에 POINT 생성 + 토류판 객체 배치
     (foreach pt point-list
       ;; POINT 생성
       (entmake
@@ -1759,25 +1851,9 @@
       )
       (debug-log (strcat "POINT 생성: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
       
-      ;; 토류판 블록 배치
-      (setq new-insert 
-        (entmake
-          (list
-            '(0 . "INSERT")
-            (cons 2 timber-block)
-            (cons 8 "_토류판(timber)")
-            (cons 10 pt)
-            '(41 . 1.0)
-            '(42 . 1.0)
-            '(43 . 1.0)
-            (cons 50 seg-angle)
-          )
-        )
-      )
-      (if new-insert
-        (debug-log (strcat "토류판 배치: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
-        (debug-log (strcat "토류판 배치 실패: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
-      )
+      ;; 토류판 개별 객체 생성 (블록 대신 직접 생성)
+      (create-timber-panel-object pt timber-width timber-thickness seg-angle)
+      (debug-log (strcat "토류판 객체 생성: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
     )
   )
   
