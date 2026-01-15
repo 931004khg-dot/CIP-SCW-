@@ -1568,8 +1568,11 @@
     ;; 세그먼트 중심에만 H-Pile + 토류판 배치
     (setq boundary-pt seg-mid)  ; 세그먼트 중심
     
-    ;; 경계선에 수직 방향 (위쪽)
-    (setq perp-angle (+ seg-angle (/ pi 2.0)))
+    ;; 경계선에 수직 방향 (안쪽으로)
+    ;; 반시계방향(CCW) 경계선: seg-angle - π/2 (오른쪽 90°)
+    ;; 시계방향(CW) 경계선: seg-angle + π/2 (왼쪽 90°)
+    ;; 일단 - π/2로 테스트 (안쪽 배치)
+    (setq perp-angle (- seg-angle (/ pi 2.0)))
     
     ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
     (princ (strcat "\n  [DEBUG] boundary-pt: (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
