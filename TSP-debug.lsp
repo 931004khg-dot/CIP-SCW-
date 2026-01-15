@@ -1752,7 +1752,8 @@
   line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
   last-before first-new current-ent ent-data delete-count
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
-  dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item)
+  dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
+  boundary-copy last-before-boundary first-new-boundary boundary-lines)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1989,24 +1990,64 @@
   (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
   (debug-log "=== 4단계: 모서리 H-Pile 배치 시작 ===")
   
+  ;; 원본 경계선 복사 및 EXPLODE
+  (command "._COPY" boundary-ent "" "0,0,0" "0,0,0")
+  (setq boundary-copy (entlast))
+  (debug-log (strcat "원본 경계선 복사: " (vl-princ-to-string boundary-copy)))
+  
+  ;; 복사본 EXPLODE
+  (setq last-before-boundary (entlast))
+  (command "._EXPLODE" boundary-copy)
+  (command)
+  
+  ;; EXPLODE된 원본 경계선의 LINE 수집
+  (setq boundary-lines '())
+  (setq first-new-boundary (if last-before-boundary (entnext last-before-boundary) (entnext)))
+  (setq current-ent first-new-boundary)
+  (while current-ent
+    (setq ent-data (entget current-ent))
+    (if (= (cdr (assoc 0 ent-data)) "LINE")
+      (progn
+        (setq boundary-lines (append boundary-lines (list current-ent)))
+        (debug-log (strcat "원본 경계선 LINE 수집: " (vl-princ-to-string current-ent)))
+      )
+    )
+    (setq current-ent (entnext current-ent))
+  )
+  
+  (debug-log (strcat "원본 경계선 LINE 개수: " (itoa (length boundary-lines))))
+  
   ;; 원본 경계선에서 꼭지점 추출
   (setq vertices '())
-  (setq boundary-data (entget boundary-ent))
-  
-  ;; LWPOLYLINE의 모든 정점(10) 추출
-  (foreach item boundary-data
-    (if (= (car item) 10)
-      (setq vertices (append vertices (list (cdr item))))
+  (foreach line-ent boundary-lines
+    (setq line-data (entget line-ent))
+    (setq pt1 (cdr (assoc 10 line-data)))
+    (setq pt2 (cdr (assoc 11 line-data)))
+    
+    ;; 중복 체크하여 꼭지점 추가
+    (if (not (member pt1 vertices))
+      (setq vertices (append vertices (list pt1)))
+    )
+    (if (not (member pt2 vertices))
+      (setq vertices (append vertices (list pt2)))
     )
   )
   
   (princ (strcat "\n  원본 경계선 꼭지점 개수: " (itoa (length vertices))))
   (debug-log (strcat "원본 경계선 꼭지점 개수: " (itoa (length vertices))))
   
-  ;; 각 꼭지점에 H-Pile 배치
+  ;; 각 꼭지점에 H-Pile 배치 (원본 경계선 LINE 사용)
   (foreach vertex vertices
-    (place-hpile-at-corner vertex exploded-lines h b tw tf hpile-block)
+    (place-hpile-at-corner vertex boundary-lines h b tw tf hpile-block)
   )
+  
+  ;; EXPLODE된 원본 경계선 LINE 삭제
+  (foreach line-ent boundary-lines
+    (if (and line-ent (entget line-ent))
+      (entdel line-ent)
+    )
+  )
+  (debug-log "원본 경계선 EXPLODE LINE 삭제 완료")
   
   (princ "\n모서리 H-Pile 배치 완료!")
   (debug-log "=== 4단계 완료 ===")
