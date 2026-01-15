@@ -1497,15 +1497,15 @@
       (debug-log "UCS → WORLD, OSNAP → OFF")
   
       ;; H-Pile 단면 생성 (중심이 원점)
-      (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
+      (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "0"))
       (debug-log "H-Pile 단면 생성 완료")
       
-      ;; 아래 플랜지 중심 계산 (바로 서있는 H-Pile)
-      ;; H-Pile 중심이 (0,0)이고, 아래 플랜지 중심 = (0, -half-h)
+      ;; 위 플랜지 중심 계산 (바로 서있는 H-Pile)
+      ;; H-Pile 중심이 (0,0)이고, 위 플랜지 중심 = (0, half-h)
       (setq half-h (/ h 2.0))
-      (setq flange-center (list 0.0 (- half-h) 0.0))
+      (setq flange-center (list 0.0 half-h 0.0))
       
-      ;; POINT 생성 (아래 플랜지 중심)
+      ;; POINT 생성 (위 플랜지 중심)
       (entmake
         (list
           '(0 . "POINT")
@@ -1514,18 +1514,18 @@
         )
       )
       (setq point-ent (entlast))
-      (debug-log (strcat "아래 플랜지 중심 POINT 생성: (0, " (rtos (- half-h) 2 2) ")"))
+      (debug-log (strcat "위 플랜지 중심 POINT 생성: (0, " (rtos half-h 2 2) ")"))
       
-      ;; 블록 생성 (기준점 = 아래 플랜지 중심)
+      ;; 블록 생성 (기준점 = 위 플랜지 중심)
       (command "._-BLOCK"
         block-name      ; 블록명
-        flange-center   ; 기준점 = 아래 플랜지 중심 POINT
+        flange-center   ; 기준점 = 위 플랜지 중심 POINT
         hpile-ent       ; H-Pile 단면
         point-ent       ; POINT
         ""
       )
       
-      (debug-log (strcat "H-Pile 블록 생성 완료 (기준점: 아래 플랜지 중심): " block-name))
+      (debug-log (strcat "H-Pile 블록 생성 완료 (기준점: 위 플랜지 중심): " block-name))
       
       ;; ===== UCS/OSNAP 복원 =====
       (if old-ucs
@@ -1642,11 +1642,16 @@
   (debug-log (strcat "각도1: " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
   (debug-log (strcat "각도2: " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
-  ;; 내각 계산 (CCW 방향)
-  (setq interior-angle (- angle2 angle1))
-  (if (< interior-angle 0)
-    (setq interior-angle (+ interior-angle (* 2 pi)))
+  ;; 내각 계산 (올바른 방법)
+  ;; angle1 = 이전 선분의 방향 (prev → curr)
+  ;; angle2 = 다음 선분의 방향 (curr → next)
+  ;; 외각 = angle2 - angle1 (CCW 회전량)
+  ;; 내각 = 2π - 외각
+  (setq exterior-angle (- angle2 angle1))
+  (if (< exterior-angle 0)
+    (setq exterior-angle (+ exterior-angle (* 2 pi)))
   )
+  (setq interior-angle (- (* 2 pi) exterior-angle))
   
   (debug-log (strcat "내각: " (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
   
@@ -1682,7 +1687,7 @@
     )
   )
   
-  (debug-log "H-Pile 배치 완료 (블록 기준점 = 아래 플랜지 중심)")
+  (debug-log "H-Pile 배치 완료 (블록 기준점 = 위 플랜지 중심)")
 )
 
 ;;; ----------------------------------------------------------------------
