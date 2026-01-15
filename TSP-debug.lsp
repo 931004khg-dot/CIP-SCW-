@@ -1717,8 +1717,13 @@
       )
       
       ;; 아래 플랜지 중심에 POINT 생성 (시각적 확인용)
-      ;; 아래 플랜지 중심 = H-Pile 중심에서 회전 방향으로 half-h 이동
-      (setq flange-bottom-center (polar hpile-center hpile-rotation half-h))
+      ;; 볼록: 플랜지 밑면 중앙 = vertex (꼭지점)
+      ;; 오목: 플랜지 밑면 중앙 = vertex에서 B/2 바깥쪽
+      (if is-convex
+        (setq flange-bottom-center vertex)
+        ;; 오목: vertex에서 이등분선 반대방향으로 B/2 이동
+        (setq flange-bottom-center (polar vertex (+ bisector-angle pi) half-b))
+      )
       
       (entmake
         (list
