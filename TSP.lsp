@@ -1022,7 +1022,7 @@
 ;;; 토류판 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-timber-panel (pt1 pt2 width h tf / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy half-h flange-top-y panel-height timber-obj doc mspace hatch-obj)
+(defun create-timber-panel (pt1 pt2 width h tf / mid-pt dx dy length panel-length panel-pt1 panel-pt2 panel-pt3 panel-pt4 pline-ent perp-dx perp-dy half-h flange-top-y panel-height timber-obj doc mspace hatch-obj sa)
   ;; pt1, pt2: H-Pile 중심점
   ;; width: 토류판 두께 (70mm)
   ;; h: H-Pile 높이 (mm)
@@ -1122,8 +1122,12 @@
       (vla-put-layer hatch-obj "_토류판(timber)")
       (vla-put-color hatch-obj 9)
       
+      ;; SafeArray 생성 및 채우기 (vlax-vbObject = 9)
+      (setq sa (vlax-make-safearray 9 (cons 0 0)))
+      (vlax-safearray-fill sa (list timber-obj))
+      
       ;; 외부 경계 추가
-      (vla-appendouterloop hatch-obj (vlax-make-safearray vlax-vbObject (cons 0 0) (list timber-obj)))
+      (vla-appendouterloop hatch-obj sa)
       
       ;; 해치 평가
       (vla-evaluate hatch-obj)
@@ -1204,7 +1208,7 @@
 ;;; ----------------------------------------------------------------------
 
 ;; 토류판 블록 생성 (해치 포함)
-(defun create-timber-panel-block (width height / timber-pline hatch-ent block-name half-width half-height timber-obj doc mspace hatch-obj)
+(defun create-timber-panel-block (width height / timber-pline hatch-ent block-name half-width half-height timber-obj doc mspace hatch-obj sa)
   ;; width: 토류판 수평 길이 (C.T.C - 50mm)
   ;; height: 토류판 높이 (thickness, 예: 60mm)
   
@@ -1254,8 +1258,12 @@
   (vla-put-layer hatch-obj "_토류판(timber)")
   (vla-put-color hatch-obj 9)
   
+  ;; SafeArray 생성 및 채우기 (vlax-vbObject = 9)
+  (setq sa (vlax-make-safearray 9 (cons 0 0)))
+  (vlax-safearray-fill sa (list timber-obj))
+  
   ;; 외부 경계 추가
-  (vla-appendouterloop hatch-obj (vlax-make-safearray vlax-vbObject (cons 0 0) (list timber-obj)))
+  (vla-appendouterloop hatch-obj sa)
   
   ;; 해치 평가
   (vla-evaluate hatch-obj)
