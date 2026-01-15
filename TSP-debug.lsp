@@ -1458,8 +1458,8 @@
   )
 )
 
-;; H-Pile 블록 생성
-(defun create-hpile-section-block (h b tw tf / hpile-ent block-name old-ucs old-osnap)
+;; H-Pile 블록 생성 (아래 플랜지 중심에 POINT 포함)
+(defun create-hpile-section-block (h b tw tf / hpile-ent point-ent block-name old-ucs old-osnap half-h flange-center)
   ;; h: 높이, b: 폭, tw: 웹 두께, tf: 플랜지 두께
   
   (debug-log "=== create-hpile-section-block 시작 ===")
@@ -1496,19 +1496,36 @@
       (setvar "OSMODE" 0)
       (debug-log "UCS → WORLD, OSNAP → OFF")
   
-      ;; H-Pile 단면 생성 (원점 기준)
+      ;; H-Pile 단면 생성 (중심이 원점)
       (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "_측면말뚝"))
       (debug-log "H-Pile 단면 생성 완료")
       
-      ;; 블록 생성
+      ;; 아래 플랜지 중심 계산 (바로 서있는 H-Pile)
+      ;; H-Pile 중심이 (0,0)이고, 아래 플랜지 중심 = (0, -half-h)
+      (setq half-h (/ h 2.0))
+      (setq flange-center (list 0.0 (- half-h) 0.0))
+      
+      ;; POINT 생성 (아래 플랜지 중심)
+      (entmake
+        (list
+          '(0 . "POINT")
+          '(8 . "_측면말뚝")
+          (cons 10 flange-center)
+        )
+      )
+      (setq point-ent (entlast))
+      (debug-log (strcat "아래 플랜지 중심 POINT 생성: (0, " (rtos (- half-h) 2 2) ")"))
+      
+      ;; 블록 생성 (기준점 = 아래 플랜지 중심)
       (command "._-BLOCK"
-        block-name    ; 블록명
-        '(0 0 0)      ; 기준점 (원점) - 리스트로 전달
-        hpile-ent     ; H-Pile 단면
+        block-name      ; 블록명
+        flange-center   ; 기준점 = 아래 플랜지 중심 POINT
+        hpile-ent       ; H-Pile 단면
+        point-ent       ; POINT
         ""
       )
       
-      (debug-log (strcat "H-Pile 블록 생성 완료: " block-name))
+      (debug-log (strcat "H-Pile 블록 생성 완료 (기준점: 아래 플랜지 중심): " block-name))
       
       ;; ===== UCS/OSNAP 복원 =====
       (if old-ucs
@@ -1616,10 +1633,9 @@
   timber-pline
 )
 
-;; 모서리(꼭지점)에 H-Pile 배치 (간단한 버전 - EXPLODE 불필요)
+;; 모서리(꼭지점)에 H-Pile 배치 (간단한 버전 - 블록 기준점 사용)
 (defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block / 
-  interior-angle bisector-angle is-convex half-h half-b hpile-center hpile-rotation
-  flange-bottom-center temp-center)
+  interior-angle bisector-angle is-convex half-h half-b hpile-rotation)
   
   (debug-log (strcat "=== 모서리 H-Pile 배치: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ") ==="))
   
@@ -1646,41 +1662,19 @@
   (setq half-h (/ h 2.0))  ; 149 mm
   (setq half-b (/ b 2.0))  ; 100.5 mm
   
-  ;; H-Pile 중심 및 회전 계산
-  (if is-convex
-    (progn
-      ;; 볼록: H-Pile 중심 = vertex + 이등분선 방향으로 half-h
-      (setq hpile-center (polar vertex bisector-angle half-h))
-      (setq hpile-rotation bisector-angle)
-      
-      ;; 아래 플랜지 중심 = vertex (꼭지점)
-      (setq flange-bottom-center vertex)
-      (debug-log "볼록: 플랜지 밑면 중앙이 꼭지점과 일치")
-    )
-    (progn
-      ;; 오목: 임시 중심 = vertex + 이등분선 방향으로 half-h
-      ;;       최종 중심 = 임시 중심 + 반대 방향으로 half-b
-      (setq temp-center (polar vertex bisector-angle half-h))
-      (setq hpile-center (polar temp-center (+ bisector-angle pi) half-b))
-      (setq hpile-rotation bisector-angle)
-      
-      ;; 아래 플랜지 중심 = vertex + 이등분선 반대 방향으로 half-b (경계선에서 100.5mm 바깥쪽)
-      (setq flange-bottom-center (polar vertex (+ bisector-angle pi) half-b))
-      (debug-log (strcat "오목: half-b (" (rtos half-b 2 2) "mm) 오프셋 적용"))
-    )
-  )
+  ;; 회전 각도 계산
+  (setq hpile-rotation bisector-angle)
   
-  (debug-log (strcat "H-Pile 중심: (" (rtos (car hpile-center) 2 2) ", " (rtos (cadr hpile-center) 2 2) ")"))
+  (debug-log (strcat "블록 삽입점 (경계선 꼭지점): (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ")"))
   (debug-log (strcat "회전 각도: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
-  (debug-log (strcat "아래 플랜지 중심: (" (rtos (car flange-bottom-center) 2 2) ", " (rtos (cadr flange-bottom-center) 2 2) ")"))
   
-  ;; H-Pile INSERT
+  ;; H-Pile 블록 INSERT (기준점이 아래 플랜지 중심이므로 vertex에 바로 삽입)
   (entmake
     (list
       '(0 . "INSERT")
       (cons 2 hpile-block)
       '(8 . "_측면말뚝")
-      (cons 10 hpile-center)
+      (cons 10 vertex)  ; 삽입점 = 경계선 꼭지점 (블록 기준점이 아래 플랜지 중심)
       '(41 . 1.0)
       '(42 . 1.0)
       '(43 . 1.0)
@@ -1688,16 +1682,7 @@
     )
   )
   
-  ;; 아래 플랜지 중심에 POINT 생성
-  (entmake
-    (list
-      '(0 . "POINT")
-      '(8 . "_측면말뚝")
-      (cons 10 flange-bottom-center)
-    )
-  )
-  
-  (debug-log "H-Pile 배치 완료")
+  (debug-log "H-Pile 배치 완료 (블록 기준점 = 아래 플랜지 중심)")
 )
 
 ;;; ----------------------------------------------------------------------
