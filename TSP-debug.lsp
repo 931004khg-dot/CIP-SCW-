@@ -1051,7 +1051,7 @@
   (setq half-h (/ h 2.0))
   (setq half-b (/ b 2.0))
   (setq half-tw (/ tw 2.0))
-  (setq fillet-r (* tw 2.0))  ; 필렛 반지름 = 웹 두께 × 2
+  (setq fillet-r (* tw 2.0))  ; 필렛 반지름 = 웹 두께 x 2
   
   (debug-log (strcat "half-h=" (rtos half-h 2 2) " half-b=" (rtos half-b 2 2) " half-tw=" (rtos half-tw 2 2) " fillet-r=" (rtos fillet-r 2 2)))
   
@@ -1593,8 +1593,8 @@
     ;; ===== 기존 LISP 방식으로 수정 =====
     ;; 경계선에 수직인 방향을 구하되, 항상 경계선 바깥쪽(+Y 방향)을 가리키도록 설정
     ;; seg-angle에 따라 수직 방향 결정:
-    ;; - 가로 세그먼트 (seg-angle ≈ 0° or 180°): +Y 방향
-    ;; - 세로 세그먼트 (seg-angle ≈ 90° or 270°): +X 또는 -X 방향
+    ;; - 가로 세그먼트 (seg-angle ~= 0 or 180): +Y 방향
+    ;; - 세로 세그먼트 (seg-angle ~= 90 or 270): +X 또는 -X 방향
     
     ;; 경계선에 수직인 방향 (항상 바깥쪽으로)
     (setq perp-angle (+ seg-angle (/ pi 2.0)))
@@ -1605,7 +1605,7 @@
     (princ (strcat "\n  [DEBUG] perp-angle (rad): " (rtos perp-angle 2 4) " (deg): " (rtos (/ (* perp-angle 180) pi) 2 2)))
     (princ (strcat "\n  [DEBUG] timber-offset: " (rtos timber-offset 2 2)))
     (setq timber-pt (polar boundary-pt perp-angle timber-offset))
-    (princ (strcat "\n  [토류판] (" (rtos (car timber-pt) 2 2) ", " (rtos (cadr timber-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "°"))
+    (princ (strcat "\n  [토류판] (" (rtos (car timber-pt) 2 2) ", " (rtos (cadr timber-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "deg"))
     
     ;; 토류판 레이어로 변경
     (command "._LAYER" "_S" "_토류판(timber)" "")
