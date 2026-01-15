@@ -1426,7 +1426,7 @@
       ;; 블록 생성
       (command "._-BLOCK"
         block-name    ; 블록명
-        "0,0"         ; 기준점 (원점)
+        '(0 0 0)      ; 기준점 (원점) - 리스트로 전달
         timber-pline  ; 토류판 폴리라인
         hatch-ent     ; 해치
         ""
@@ -1472,7 +1472,7 @@
       ;; 블록 생성
       (command "._-BLOCK"
         block-name    ; 블록명
-        "0,0"         ; 기준점 (원점)
+        '(0 0 0)      ; 기준점 (원점) - 리스트로 전달
         hpile-ent     ; H-Pile 단면
         ""
       )
