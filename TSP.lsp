@@ -1318,7 +1318,8 @@
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
   h b tw tf hpile-values seg-list i pt1 pt2 seg seg-length seg-mid seg-angle 
   positions j pos timber-pt hpile-left hpile-right placed-hpiles dist-ok 
-  timber-block hpile-block timber-width num-segments)
+  timber-block hpile-block timber-width num-segments half-h adjusted-pos 
+  perp-angle timber-offset hpile-offset boundary-pt)
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -1332,8 +1333,12 @@
   (setq tf (nth 3 hpile-values))
   
   (princ (strcat "\n경계선 따라 배치 시작..."))
-  (princ (strcat "\nH-Pile: H=" (rtos h 2 0) " B=" (rtos b 2 0)))
+  (princ (strcat "\nH-Pile: H=" (rtos h 2 0) " B=" (rtos b 2 0) " tf=" (rtos tf 2 0)))
   (princ (strcat "\nC.T.C: " (rtos (* ctc 1000) 2 0) "mm"))
+  (princ (strcat "\n토류판 두께: " (rtos timber-thickness 2 0) "mm"))
+  
+  ;; 반값 계산
+  (setq half-h (/ h 2.0))
   
   ;; 토류판 블록 생성
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm
@@ -1341,6 +1346,15 @@
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
+  
+  ;; Y축 오프셋 계산
+  ;; H-Pile: 하단이 경계선에 오도록 중심을 위로 올림
+  ;; 토류판: 하단이 H-Pile 하단 플랜지 상단에 오도록 (경계선에서 위로 tf)
+  (setq hpile-offset half-h)           ; H-Pile 중심 = boundary_y + half-h
+  (setq timber-offset (+ tf (/ timber-thickness 2.0)))  ; 토류판 중심 = boundary_y + tf + (timber-thickness/2)
+  
+  (princ (strcat "\nH-Pile Y 오프셋: +" (rtos hpile-offset 2 2) "mm (하단이 경계선)"))
+  (princ (strcat "\n토류판 Y 오프셋: +" (rtos timber-offset 2 2) "mm (하단이 플랜지 상단)"))
   
   ;; 경계선의 각 세그먼트 추출
   (setq seg-list (get-boundary-segments boundary-ent))
@@ -1365,9 +1379,13 @@
     ;; 각 위치에 배치
     (setq j 0)
     (while (< j (length positions))
-      (setq pos (nth j positions))
+      (setq boundary-pt (nth j positions))  ; 경계선 상의 점
       
-      ;; 토류판 배치
+      ;; 경계선에 수직 방향 (위쪽)
+      (setq perp-angle (+ seg-angle (/ pi 2.0)))
+      
+      ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
+      (setq pos (polar boundary-pt perp-angle timber-offset))
       (command "._INSERT" 
         timber-block
         pos
@@ -1375,8 +1393,9 @@
         (/ (* seg-angle 180) pi)
       )
       
-      ;; H-Pile 좌측
-      (setq hpile-left (polar pos seg-angle (- (/ timber-width 2.0))))
+      ;; H-Pile 좌측: 토류판 중심에서 좌측으로 timber-width/2, 수직으로 (hpile-offset - timber-offset)
+      (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
+      (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
       (setq dist-ok T)
       (foreach placed-pt placed-hpiles
         (if (< (distance hpile-left placed-pt) 10)
@@ -1390,8 +1409,8 @@
         )
       )
       
-      ;; H-Pile 우측
-      (setq hpile-right (polar pos seg-angle (/ timber-width 2.0)))
+      ;; H-Pile 우측: 토류판 중심에서 우측으로 timber-width/2, 수직으로 (hpile-offset - timber-offset)
+      (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
       (setq dist-ok T)
       (foreach placed-pt placed-hpiles
         (if (< (distance hpile-right placed-pt) 10)
