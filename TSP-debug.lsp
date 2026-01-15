@@ -1491,7 +1491,8 @@
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
   h b tw tf hpile-values timber-block hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
-  line-ent line-data pt1 pt2 mid-pt seg-angle original-area offset-area last-before-explode)
+  line-ent line-data pt1 pt2 mid-pt seg-angle original-area offset-area
+  ss-lines ss-len i)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1594,25 +1595,29 @@
   
   ;; ===== 2단계: 오프셋 객체를 EXPLODE =====
   (princ "\n\n[2단계] 오프셋 객체 EXPLODE...")
-  
-  ;; EXPLODE 전에 현재 entlast 저장
-  (setq last-before-explode (entlast))
-  (debug-log (strcat "EXPLODE 전 entlast: " (vl-princ-to-string last-before-explode)))
+  (debug-log "EXPLODE 시작")
   
   (command "._EXPLODE" offset-obj)
+  (command)  ;; 명령 완료 확인
   
-  ;; EXPLODE 후 생성된 LINE 객체들 수집 (역순 탐색)
+  ;; EXPLODE로 생성된 객체들을 ssget "P"로 선택
+  (setq ss-lines (ssget "_P"))
+  
+  ;; LINE만 필터링하여 리스트로 수집
   (setq exploded-lines '())
-  (setq line-ent (entlast))
-  
-  ;; entlast부터 역순으로 last-before-explode까지 탐색
-  (while (and line-ent 
-              (not (equal line-ent last-before-explode)))
-    (setq line-data (entget line-ent))
-    (if (= (cdr (assoc 0 line-data)) "LINE")
-      (setq exploded-lines (cons line-ent exploded-lines))
+  (if ss-lines
+    (progn
+      (setq ss-len (sslength ss-lines))
+      (setq i 0)
+      (while (< i ss-len)
+        (setq line-ent (ssname ss-lines i))
+        (setq line-data (entget line-ent))
+        (if (= (cdr (assoc 0 line-data)) "LINE")
+          (setq exploded-lines (append exploded-lines (list line-ent)))
+        )
+        (setq i (1+ i))
+      )
     )
-    (setq line-ent (entprev line-ent))
   )
   
   (princ (strcat "\nEXPLODE 완료: " (itoa (length exploded-lines)) "개 선분 생성"))
