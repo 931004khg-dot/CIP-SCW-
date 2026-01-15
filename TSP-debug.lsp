@@ -1492,7 +1492,8 @@
   h b tw tf hpile-values total-length num-segments seg-list i pt1 pt2 
   seg-length seg-mid seg-angle positions j timber-pt hpile-left hpile-right
   timber-block hpile-block timber-width half-h 
-  perp-angle timber-offset hpile-offset boundary-pt adjusted-pos)
+  perp-angle timber-offset hpile-offset boundary-pt adjusted-pos
+  vertices direction)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 ===")
   
@@ -1531,6 +1532,27 @@
   (debug-log (strcat "H-Pile Y 오프셋: +" (rtos hpile-offset 2 2) "mm (하단이 경계선)"))
   (debug-log (strcat "토류판 Y 오프셋: +" (rtos timber-offset 2 2) "mm (하단이 플랜지 상단)"))
   
+  ;; 경계선의 정점 추출 (방향 판단용)
+  (setq vertices '())
+  (foreach item (entget boundary-ent)
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
+    )
+  )
+  
+  ;; 경계선 방향 판단
+  (setq direction (get-boundary-direction vertices))
+  (if (= direction 1)
+    (progn
+      (princ "\n경계선 방향: CCW (반시계방향)")
+      (debug-log "경계선 방향: CCW (반시계방향)")
+    )
+    (progn
+      (princ "\n경계선 방향: CW (시계방향)")
+      (debug-log "경계선 방향: CW (시계방향)")
+    )
+  )
+  
   ;; 경계선의 각 세그먼트 추출
   (setq seg-list (get-boundary-segments boundary-ent))
   (setq num-segments (length seg-list))
@@ -1568,11 +1590,13 @@
     ;; 세그먼트 중심에만 H-Pile + 토류판 배치
     (setq boundary-pt seg-mid)  ; 세그먼트 중심
     
-    ;; 경계선에 수직 방향 (안쪽으로)
-    ;; 반시계방향(CCW) 경계선: seg-angle - π/2 (오른쪽 90°)
-    ;; 시계방향(CW) 경계선: seg-angle + π/2 (왼쪽 90°)
-    ;; 일단 - π/2로 테스트 (안쪽 배치)
-    (setq perp-angle (- seg-angle (/ pi 2.0)))
+    ;; 경계선에 수직 방향 (바깥쪽으로)
+    ;; direction = 1 (CCW): seg-angle - π/2 → 왼쪽 90° 회전 (바깥쪽)
+    ;; direction = -1 (CW): seg-angle + π/2 → 오른쪽 90° 회전 (바깥쪽)
+    (if (= direction 1)
+      (setq perp-angle (- seg-angle (/ pi 2.0)))   ; CCW: 왼쪽 90° (바깥쪽)
+      (setq perp-angle (+ seg-angle (/ pi 2.0)))   ; CW: 오른쪽 90° (바깥쪽)
+    )
     
     ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
     (princ (strcat "\n  [DEBUG] boundary-pt: (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
@@ -1627,6 +1651,29 @@
   
   (princ "\n배치 완료!")
   (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
+)
+
+;; 경계선 방향 판단 (CW/CCW)
+;; 반환값: 1 = CCW (반시계), -1 = CW (시계)
+(defun get-boundary-direction (vertices / signed-area i x1 y1 x2 y2 n)
+  (setq signed-area 0.0)
+  (setq n (length vertices))
+  (setq i 0)
+  
+  ;; Shoelace 공식으로 부호 있는 면적 계산
+  (while (< i n)
+    (setq x1 (car (nth i vertices)))
+    (setq y1 (cadr (nth i vertices)))
+    (setq x2 (car (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    (setq y2 (cadr (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    (setq signed-area (+ signed-area (* (- x1 x2) (+ y1 y2))))
+    (setq i (1+ i))
+  )
+  
+  (if (> signed-area 0)
+    1   ; CCW (반시계방향)
+    -1  ; CW (시계방향)
+  )
 )
 
 ;; 경계선 세그먼트 추출
