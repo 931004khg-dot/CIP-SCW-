@@ -1487,15 +1487,13 @@
 ;;; 경계선 따라 배치 함수
 ;;; ----------------------------------------------------------------------
 
-;; 경계선을 따라 H-Pile+토류판 배치
+;; 경계선을 따라 H-Pile+토류판 배치 (새로운 로직)
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
-  h b tw tf hpile-values total-length num-segments seg-list i pt1 pt2 
-  seg-length seg-mid seg-angle positions j timber-pt hpile-left hpile-right
-  timber-block hpile-block timber-width half-h 
-  perp-angle timber-offset hpile-offset boundary-pt adjusted-pos
-  vertices direction)
+  h b tw tf hpile-values timber-block hpile-block timber-width half-h 
+  timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
+  line-ent line-data pt1 pt2 mid-pt seg-angle)
   
-  (debug-log "=== place-hpile-timber-along-boundary 시작 ===")
+  (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -1508,7 +1506,7 @@
   (setq tw (nth 2 hpile-values))
   (setq tf (nth 3 hpile-values))
   
-  (princ (strcat "\n경계선 따라 배치 시작..."))
+  (princ (strcat "\n경계선 따라 배치 시작 (새로운 방식)..."))
   (princ (strcat "\nH-Pile: H=" (rtos h 2 0) " B=" (rtos b 2 0) " tw=" (rtos tw 2 0) " tf=" (rtos tf 2 0)))
   (princ (strcat "\nC.T.C: " (rtos (* ctc 1000) 2 0) "mm"))
   (princ (strcat "\n토류판 두께: " (itoa timber-thickness) "mm"))
@@ -1516,144 +1514,127 @@
   ;; 반값 계산
   (setq half-h (/ h 2.0))
   
+  ;; 토류판 오프셋 거리 = tf + timber-thickness/2
+  (setq timber-offset (+ tf (/ timber-thickness 2.0)))
+  (princ (strcat "\n토류판 오프셋: " (rtos timber-offset 2 2) "mm (바깥쪽)"))
+  (debug-log (strcat "토류판 오프셋: " (rtos timber-offset 2 2) "mm"))
+  
+  ;; H-Pile 오프셋 거리
+  (setq hpile-offset half-h)
+  (princ (strcat "\nH-Pile 오프셋: " (rtos hpile-offset 2 2) "mm (바깥쪽)"))
+  (debug-log (strcat "H-Pile 오프셋: " (rtos hpile-offset 2 2) "mm"))
+  
   ;; 토류판 블록 생성
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
   (setq timber-block (create-timber-panel-block timber-width timber-thickness))
+  (debug-log (strcat "토류판 블록: " timber-block))
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
+  (debug-log (strcat "H-Pile 블록: " hpile-block))
   
-  ;; Y축 오프셋 계산
-  ;; H-Pile: 하단이 경계선에 오도록 중심을 위로 올림
-  ;; 토류판: 하단이 H-Pile 하단 플랜지 상단에 오도록 (경계선에서 위로 tf)
-  (setq hpile-offset half-h)           ; H-Pile 중심 = boundary_y + half-h
-  (setq timber-offset (+ tf (/ timber-thickness 2.0)))  ; 토류판 중심 = boundary_y + tf + (timber-thickness/2)
+  ;; ===== 1단계: 경계선을 timber-offset만큼 바깥쪽으로 오프셋 =====
+  (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 바깥쪽)..."))
+  (setq boundary-vla (vlax-ename->vla-object boundary-ent))
   
-  (debug-log (strcat "H-Pile Y 오프셋: +" (rtos hpile-offset 2 2) "mm (하단이 경계선)"))
-  (debug-log (strcat "토류판 Y 오프셋: +" (rtos timber-offset 2 2) "mm (하단이 플랜지 상단)"))
+  ;; 오프셋 시도 (양수 = 바깥쪽)
+  (setq offset-vla (vl-catch-all-apply 'vla-offset (list boundary-vla timber-offset)))
   
-  ;; 경계선의 정점 추출 (방향 판단용)
-  (setq vertices '())
-  (foreach item (entget boundary-ent)
-    (if (= (car item) 10)
-      (setq vertices (append vertices (list (cdr item))))
+  ;; 오류 처리
+  (if (vl-catch-all-error-p offset-vla)
+    (progn
+      (princ "\n[Warning] 양수 오프셋 실패, 음수로 재시도...")
+      (setq offset-vla (vla-offset boundary-vla (- timber-offset)))
     )
   )
   
-  ;; 경계선 방향 판단
-  (setq direction (get-boundary-direction vertices))
-  (if (= direction 1)
+  ;; VLA variant 처리
+  (if (= (type offset-vla) 'variant)
+    (setq offset-vla (vlax-variant-value offset-vla))
+  )
+  (if (= (type offset-vla) 'safearray)
+    (setq offset-vla (vlax-safearray->list offset-vla))
+  )
+  (if (= (type offset-vla) 'list)
+    (setq offset-vla (car offset-vla))
+  )
+  
+  (setq offset-obj (vlax-vla-object->ename offset-vla))
+  (princ (strcat "\n오프셋 객체 생성 완료: " (vl-princ-to-string offset-obj)))
+  (debug-log (strcat "오프셋 객체: " (vl-princ-to-string offset-obj)))
+  
+  ;; ===== 2단계: 오프셋 객체를 EXPLODE =====
+  (princ "\n\n[2단계] 오프셋 객체 EXPLODE...")
+  (command "._EXPLODE" offset-obj)
+  
+  ;; EXPLODE 후 생성된 LINE 객체들 수집
+  (setq exploded-lines '())
+  (setq line-ent (entlast))
+  
+  ;; 역순으로 탐색하여 모든 LINE 수집
+  (while (and line-ent 
+              (setq line-data (entget line-ent))
+              (= (cdr (assoc 0 line-data)) "LINE"))
+    (setq exploded-lines (cons line-ent exploded-lines))
+    (setq line-ent (entnext line-ent))
+  )
+  
+  ;; 다시 정방향으로 탐색
+  (if (null exploded-lines)
     (progn
-      (princ "\n경계선 방향: CCW (반시계방향)")
-      (debug-log "경계선 방향: CCW (반시계방향)")
-    )
-    (progn
-      (princ "\n경계선 방향: CW (시계방향)")
-      (debug-log "경계선 방향: CW (시계방향)")
+      (setq line-ent (entlast))
+      (repeat 10  ; 최대 10개 세그먼트 가정
+        (if (and line-ent
+                 (setq line-data (entget line-ent))
+                 (= (cdr (assoc 0 line-data)) "LINE"))
+          (setq exploded-lines (append exploded-lines (list line-ent)))
+        )
+        (setq line-ent (entprev line-ent))
+      )
     )
   )
   
-  ;; 경계선의 각 세그먼트 추출
-  (setq seg-list (get-boundary-segments boundary-ent))
-  (setq num-segments (length seg-list))
+  (princ (strcat "\nEXPLODE 완료: " (itoa (length exploded-lines)) "개 선분 생성"))
+  (debug-log (strcat "EXPLODE 후 LINE 개수: " (itoa (length exploded-lines))))
   
-  (princ (strcat "\n세그먼트 개수: " (itoa num-segments)))
+  ;; ===== 3단계: 각 LINE의 중점에 임시 POINT 생성 + 토류판 배치 =====
+  (princ "\n\n[3단계] 각 선분 중점에 토류판 배치...")
   
-  ;; 각 세그먼트 처리
-  (setq i 0)
-  (while (< i num-segments)
-    (setq seg (nth i seg-list))
-    (setq pt1 (nth 0 seg))
-    (setq pt2 (nth 1 seg))
-    (setq seg-length (distance pt1 pt2))
-    (setq seg-mid (list 
+  (foreach line-ent exploded-lines
+    (setq line-data (entget line-ent))
+    (setq pt1 (cdr (assoc 10 line-data)))
+    (setq pt2 (cdr (assoc 11 line-data)))
+    
+    ;; 중점 계산
+    (setq mid-pt (list
       (/ (+ (car pt1) (car pt2)) 2.0)
       (/ (+ (cadr pt1) (cadr pt2)) 2.0)
     ))
+    
+    ;; 선분 각도 계산
     (setq seg-angle (angle pt1 pt2))
     
-    (princ (strcat "\n세그먼트 " (itoa (1+ i)) ": 길이=" (rtos seg-length 2 0) "mm 중심=(" (rtos (car seg-mid) 2 2) ", " (rtos (cadr seg-mid) 2 2) ")"))
+    ;; 임시 POINT 생성
+    (command "._POINT" mid-pt)
     
-    ;; 세그먼트 중심에서 양쪽으로 C.T.C 간격으로 위치 계산 (임시 POINT 생성)
-    (setq positions (calculate-positions-on-segment pt1 pt2 (* ctc 1000)))
+    (princ (strcat "\n  선분 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "deg"))
     
-    (princ (strcat " → POINT " (itoa (length positions)) "개"))
-    
-    ;; 임시 POINT 객체 생성 (위치 확인용)
-    (setq j 0)
-    (while (< j (length positions))
-      (setq boundary-pt (nth j positions))
-      (command "._POINT" boundary-pt)
-      (setq j (1+ j))
-    )
-    
-    ;; 세그먼트 중심에만 H-Pile + 토류판 배치
-    (setq boundary-pt seg-mid)  ; 세그먼트 중심
-    
-    ;; ===== 기존 LISP 방식으로 수정 =====
-    ;; 경계선에 수직인 방향을 구하되, 항상 경계선 바깥쪽(+Y 방향)을 가리키도록 설정
-    ;; seg-angle에 따라 수직 방향 결정:
-    ;; - 가로 세그먼트 (seg-angle ~= 0 or 180): +Y 방향
-    ;; - 세로 세그먼트 (seg-angle ~= 90 or 270): +X 또는 -X 방향
-    
-    ;; 경계선에 수직인 방향 (항상 바깥쪽으로)
-    (setq perp-angle (+ seg-angle (/ pi 2.0)))
-    
-    ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 바깥쪽으로
-    (princ (strcat "\n  [DEBUG] boundary-pt: (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
-    (princ (strcat "\n  [DEBUG] seg-angle (deg): " (rtos (/ (* seg-angle 180) pi) 2 2)))
-    (princ (strcat "\n  [DEBUG] perp-angle (rad): " (rtos perp-angle 2 4) " (deg): " (rtos (/ (* perp-angle 180) pi) 2 2)))
-    (princ (strcat "\n  [DEBUG] timber-offset: " (rtos timber-offset 2 2)))
-    (setq timber-pt (polar boundary-pt perp-angle timber-offset))
-    (princ (strcat "\n  [토류판] (" (rtos (car timber-pt) 2 2) ", " (rtos (cadr timber-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "deg"))
-    
-    ;; 토류판 레이어로 변경
+    ;; 토류판 블록 배치
     (command "._LAYER" "_S" "_토류판(timber)" "")
     (command "._INSERT" 
       timber-block
-      timber-pt
+      mid-pt
       1  ; X scale
       1  ; Y scale
       (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
     )
-    
-    ;; H-Pile 배치: 경계선에서 수직으로 hpile-offset만큼 바깥쪽으로
-    (princ (strcat "\n  [DEBUG] hpile-offset: " (rtos hpile-offset 2 2)))
-    (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
-    (princ (strcat "\n  [DEBUG] adjusted-pos: (" (rtos (car adjusted-pos) 2 2) ", " (rtos (cadr adjusted-pos) 2 2) ")"))
-    
-    ;; H-Pile 좌측 배치: 세그먼트를 따라 timber-width/2 만큼 왼쪽으로
-    (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
-    (princ (strcat "\n  [H-Pile좌] (" (rtos (car hpile-left) 2 2) ", " (rtos (cadr hpile-left) 2 2) ")"))
-    
-    ;; H-Pile 레이어로 변경
-    (command "._LAYER" "_S" "_측면말뚝" "")
-    (command "._INSERT" 
-      hpile-block
-      hpile-left
-      1
-      1
-      (/ (* seg-angle 180) pi)
-    )
-    
-    ;; H-Pile 우측 배치: 세그먼트를 따라 timber-width/2 만큼 오른쪽으로
-    (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
-    (princ (strcat "\n  [H-Pile우] (" (rtos (car hpile-right) 2 2) ", " (rtos (cadr hpile-right) 2 2) ")"))
-    
-    ;; H-Pile 레이어로 변경 (이미 _측면말뚝이지만 명시적으로)
-    (command "._LAYER" "_S" "_측면말뚝" "")
-    (command "._INSERT" 
-      hpile-block
-      hpile-right
-      1
-      1
-      (/ (* seg-angle 180) pi)
-    )
-    
-    (setq i (1+ i))
   )
   
-  (princ "\n배치 완료!")
+  ;; ===== 4단계: H-Pile 배치 (기존 로직 유지) =====
+  (princ "\n\n[4단계] H-Pile 배치는 추후 구현...")
+  (debug-log "토류판 배치 완료, H-Pile 배치는 다음 단계")
+  
+  (princ "\n\n토류판 배치 완료!")
   (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
 )
 
