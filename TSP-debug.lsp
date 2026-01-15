@@ -1752,7 +1752,7 @@
   line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
   last-before first-new current-ent ent-data delete-count
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
-  dist-from-pt1 dist-from-pt2 pt vertices vertex)
+  dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1989,24 +1989,19 @@
   (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
   (debug-log "=== 4단계: 모서리 H-Pile 배치 시작 ===")
   
-  ;; 모든 꼭지점 추출
+  ;; 원본 경계선에서 꼭지점 추출
   (setq vertices '())
-  (foreach line-ent exploded-lines
-    (setq line-data (entget line-ent))
-    (setq pt1 (cdr (assoc 10 line-data)))
-    (setq pt2 (cdr (assoc 11 line-data)))
-    
-    ;; 중복 체크하여 꼭지점 추가
-    (if (not (member pt1 vertices))
-      (setq vertices (append vertices (list pt1)))
-    )
-    (if (not (member pt2 vertices))
-      (setq vertices (append vertices (list pt2)))
+  (setq boundary-data (entget boundary-ent))
+  
+  ;; LWPOLYLINE의 모든 정점(10) 추출
+  (foreach item boundary-data
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
     )
   )
   
-  (princ (strcat "\n  추출된 꼭지점 개수: " (itoa (length vertices))))
-  (debug-log (strcat "추출된 꼭지점 개수: " (itoa (length vertices))))
+  (princ (strcat "\n  원본 경계선 꼭지점 개수: " (itoa (length vertices))))
+  (debug-log (strcat "원본 경계선 꼭지점 개수: " (itoa (length vertices))))
   
   ;; 각 꼭지점에 H-Pile 배치
   (foreach vertex vertices
