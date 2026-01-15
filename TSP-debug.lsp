@@ -1491,7 +1491,7 @@
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
   h b tw tf hpile-values timber-block hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
-  line-ent line-data pt1 pt2 mid-pt seg-angle)
+  line-ent line-data pt1 pt2 mid-pt seg-angle original-area offset-area last-before-explode)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1537,6 +1537,10 @@
   (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 바깥쪽)..."))
   (setq boundary-vla (vlax-ename->vla-object boundary-ent))
   
+  ;; 원본 경계선 면적 계산
+  (setq original-area (vla-get-area boundary-vla))
+  (debug-log (strcat "원본 면적: " (rtos original-area 2 2)))
+  
   ;; 오프셋 시도 (양수 = 바깥쪽)
   (setq offset-vla (vl-catch-all-apply 'vla-offset (list boundary-vla timber-offset)))
   
@@ -1560,38 +1564,55 @@
   )
   
   (setq offset-obj (vlax-vla-object->ename offset-vla))
+  
+  ;; 오프셋 방향 확인 (면적으로 판단)
+  (setq offset-area (vla-get-area offset-vla))
+  (debug-log (strcat "오프셋 면적: " (rtos offset-area 2 2)))
+  
+  ;; 면적이 작아졌으면 안쪽으로 간 것 → 다시 반대로
+  (if (< offset-area original-area)
+    (progn
+      (princ "\n[Warning] 안쪽 오프셋 생성됨, 반대 방향으로 재시도...")
+      (debug-log "WARNING: 안쪽 오프셋, 반대 방향 재시도")
+      (vla-delete offset-vla)
+      (setq offset-vla (vla-offset boundary-vla (- timber-offset)))
+      (if (= (type offset-vla) 'variant)
+        (setq offset-vla (vlax-variant-value offset-vla))
+      )
+      (if (= (type offset-vla) 'safearray)
+        (setq offset-vla (vlax-safearray->list offset-vla))
+      )
+      (if (= (type offset-vla) 'list)
+        (setq offset-vla (car offset-vla))
+      )
+      (setq offset-obj (vlax-vla-object->ename offset-vla))
+    )
+  )
+  
   (princ (strcat "\n오프셋 객체 생성 완료: " (vl-princ-to-string offset-obj)))
   (debug-log (strcat "오프셋 객체: " (vl-princ-to-string offset-obj)))
   
   ;; ===== 2단계: 오프셋 객체를 EXPLODE =====
   (princ "\n\n[2단계] 오프셋 객체 EXPLODE...")
+  
+  ;; EXPLODE 전에 현재 entlast 저장
+  (setq last-before-explode (entlast))
+  (debug-log (strcat "EXPLODE 전 entlast: " (vl-princ-to-string last-before-explode)))
+  
   (command "._EXPLODE" offset-obj)
   
-  ;; EXPLODE 후 생성된 LINE 객체들 수집
+  ;; EXPLODE 후 생성된 LINE 객체들 수집 (역순 탐색)
   (setq exploded-lines '())
   (setq line-ent (entlast))
   
-  ;; 역순으로 탐색하여 모든 LINE 수집
+  ;; entlast부터 역순으로 last-before-explode까지 탐색
   (while (and line-ent 
-              (setq line-data (entget line-ent))
-              (= (cdr (assoc 0 line-data)) "LINE"))
-    (setq exploded-lines (cons line-ent exploded-lines))
-    (setq line-ent (entnext line-ent))
-  )
-  
-  ;; 다시 정방향으로 탐색
-  (if (null exploded-lines)
-    (progn
-      (setq line-ent (entlast))
-      (repeat 10  ; 최대 10개 세그먼트 가정
-        (if (and line-ent
-                 (setq line-data (entget line-ent))
-                 (= (cdr (assoc 0 line-data)) "LINE"))
-          (setq exploded-lines (append exploded-lines (list line-ent)))
-        )
-        (setq line-ent (entprev line-ent))
-      )
+              (not (equal line-ent last-before-explode)))
+    (setq line-data (entget line-ent))
+    (if (= (cdr (assoc 0 line-data)) "LINE")
+      (setq exploded-lines (cons line-ent exploded-lines))
     )
+    (setq line-ent (entprev line-ent))
   )
   
   (princ (strcat "\nEXPLODE 완료: " (itoa (length exploded-lines)) "개 선분 생성"))
