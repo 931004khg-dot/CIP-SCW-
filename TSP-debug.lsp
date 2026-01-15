@@ -1572,6 +1572,9 @@
     (setq perp-angle (+ seg-angle (/ pi 2.0)))
     
     ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
+    (princ (strcat "\n  [DEBUG] boundary-pt: (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
+    (princ (strcat "\n  [DEBUG] perp-angle (rad): " (rtos perp-angle 2 4) " (deg): " (rtos (/ (* perp-angle 180) pi) 2 2)))
+    (princ (strcat "\n  [DEBUG] timber-offset: " (rtos timber-offset 2 2)))
     (setq timber-pt (polar boundary-pt perp-angle timber-offset))
     (princ (strcat "\n  [토류판] (" (rtos (car timber-pt) 2 2) ", " (rtos (cadr timber-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "°"))
     
@@ -1586,7 +1589,9 @@
     )
     
     ;; H-Pile 좌측 배치
+    (princ (strcat "\n  [DEBUG] hpile-offset: " (rtos hpile-offset 2 2)))
     (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
+    (princ (strcat "\n  [DEBUG] adjusted-pos: (" (rtos (car adjusted-pos) 2 2) ", " (rtos (cadr adjusted-pos) 2 2) ")"))
     (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
     (princ (strcat "\n  [H-Pile좌] (" (rtos (car hpile-left) 2 2) ", " (rtos (cadr hpile-left) 2 2) ")"))
     
