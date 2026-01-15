@@ -1551,61 +1551,66 @@
     (setq seg-angle (angle pt1 pt2))
     
     (debug-log (strcat "세그먼트 " (itoa (1+ i)) ": 길이=" (rtos seg-length 2 0) "mm"))
+    (debug-log (strcat "  중심: (" (rtos (car seg-mid) 2 2) ", " (rtos (cadr seg-mid) 2 2) ")"))
     
-    ;; 세그먼트 중심에서 양쪽으로 C.T.C 간격으로 위치 계산
+    ;; 세그먼트 중심에서 양쪽으로 C.T.C 간격으로 위치 계산 (임시 POINT 생성)
     (setq positions (calculate-positions-on-segment pt1 pt2 (* ctc 1000)))
     
     (debug-log (strcat "배치 위치 개수: " (itoa (length positions))))
     
-    ;; 각 위치에 토류판 + H-Pile 배치
+    ;; 임시 POINT 객체 생성 (위치 확인용)
     (setq j 0)
     (while (< j (length positions))
-      (setq boundary-pt (nth j positions))  ; 경계선 상의 점
-      
-      ;; 경계선에 수직 방향 (위쪽)
-      (setq perp-angle (+ seg-angle (/ pi 2.0)))
-      
-      ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
-      (setq timber-pt (polar boundary-pt perp-angle timber-offset))
-      
-      ;; 토류판 레이어로 변경
-      (command "._LAYER" "_S" "_토류판(timber)" "")
-      (command "._INSERT" 
-        timber-block
-        timber-pt
-        1  ; X scale
-        1  ; Y scale
-        (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
-      )
-      
-      ;; H-Pile 좌측 배치
-      (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
-      (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
-      
-      ;; H-Pile 레이어로 변경
-      (command "._LAYER" "_S" "_측면말뚝" "")
-      (command "._INSERT" 
-        hpile-block
-        hpile-left
-        1
-        1
-        (/ (* seg-angle 180) pi)
-      )
-      
-      ;; H-Pile 우측 배치
-      (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
-      
-      ;; H-Pile 레이어로 변경 (이미 _측면말뚝이지만 명시적으로)
-      (command "._LAYER" "_S" "_측면말뚝" "")
-      (command "._INSERT" 
-        hpile-block
-        hpile-right
-        1
-        1
-        (/ (* seg-angle 180) pi)
-      )
-      
+      (setq boundary-pt (nth j positions))
+      (command "._POINT" boundary-pt)
+      (debug-log (strcat "  위치 " (itoa (1+ j)) ": (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
       (setq j (1+ j))
+    )
+    
+    ;; 세그먼트 중심에만 H-Pile + 토류판 배치
+    (setq boundary-pt seg-mid)  ; 세그먼트 중심
+    
+    ;; 경계선에 수직 방향 (위쪽)
+    (setq perp-angle (+ seg-angle (/ pi 2.0)))
+    
+    ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
+    (setq timber-pt (polar boundary-pt perp-angle timber-offset))
+    
+    ;; 토류판 레이어로 변경
+    (command "._LAYER" "_S" "_토류판(timber)" "")
+    (command "._INSERT" 
+      timber-block
+      timber-pt
+      1  ; X scale
+      1  ; Y scale
+      (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
+    )
+    
+    ;; H-Pile 좌측 배치
+    (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
+    (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
+    
+    ;; H-Pile 레이어로 변경
+    (command "._LAYER" "_S" "_측면말뚝" "")
+    (command "._INSERT" 
+      hpile-block
+      hpile-left
+      1
+      1
+      (/ (* seg-angle 180) pi)
+    )
+    
+    ;; H-Pile 우측 배치
+    (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
+    
+    ;; H-Pile 레이어로 변경 (이미 _측면말뚝이지만 명시적으로)
+    (command "._LAYER" "_S" "_측면말뚝" "")
+    (command "._INSERT" 
+      hpile-block
+      hpile-right
+      1
+      1
+      (/ (* seg-angle 180) pi)
     )
     
     (setq i (1+ i))
