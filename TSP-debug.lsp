@@ -1459,7 +1459,7 @@
 )
 
 ;; H-Pile 블록 생성 (아래 플랜지 중심에 POINT 포함)
-(defun create-hpile-section-block (h b tw tf / hpile-ent point-ent block-name old-ucs old-osnap half-h flange-center)
+(defun create-hpile-section-block (h b tw tf / hpile-ent point-ent block-name layer-name old-ucs old-osnap half-h flange-center)
   ;; h: 높이, b: 폭, tw: 웹 두께, tf: 플랜지 두께
   
   (debug-log "=== create-hpile-section-block 시작 ===")
@@ -1473,7 +1473,15 @@
   
   (debug-log (strcat "블록명: " block-name))
   
+  ;; H-Pile 객체용 레이어명 생성
+  (setq layer-name (strcat "_H-Pile_" 
+                           (itoa h) "x" 
+                           (itoa b) "x" 
+                           (itoa tw) "-" 
+                           (itoa tf)))
+  
   ;; 레이어 생성
+  (create-layer-if-not-exists layer-name "3")
   (create-layer-if-not-exists "_측면말뚝" "3")
   
   ;; 블록이 이미 존재하는지 확인
@@ -1497,7 +1505,7 @@
       (debug-log "UCS → WORLD, OSNAP → OFF")
   
       ;; H-Pile 단면 생성 (중심이 원점)
-      (setq hpile-ent (create-hpile-section '(0 0) h b tw tf "0"))
+      (setq hpile-ent (create-hpile-section '(0 0) h b tw tf layer-name))
       (debug-log "H-Pile 단면 생성 완료")
       
       ;; 위 플랜지 중심 계산 (바로 서있는 H-Pile)
