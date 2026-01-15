@@ -1590,16 +1590,18 @@
     ;; 세그먼트 중심에만 H-Pile + 토류판 배치
     (setq boundary-pt seg-mid)  ; 세그먼트 중심
     
-    ;; 경계선에 수직 방향 (바깥쪽으로)
-    ;; direction = 1 (CCW): seg-angle - π/2 → 오른쪽 90° 회전 (바깥쪽)
-    ;; direction = -1 (CW): seg-angle + π/2 → 왼쪽 90° 회전 (바깥쪽)
-    (if (= direction 1)
-      (setq perp-angle (- seg-angle (/ pi 2.0)))   ; CCW: 오른쪽 90° (바깥쪽)
-      (setq perp-angle (+ seg-angle (/ pi 2.0)))   ; CW: 왼쪽 90° (바깥쪽)
-    )
+    ;; ===== 기존 LISP 방식으로 수정 =====
+    ;; 경계선에 수직인 방향을 구하되, 항상 경계선 바깥쪽(+Y 방향)을 가리키도록 설정
+    ;; seg-angle에 따라 수직 방향 결정:
+    ;; - 가로 세그먼트 (seg-angle ≈ 0° or 180°): +Y 방향
+    ;; - 세로 세그먼트 (seg-angle ≈ 90° or 270°): +X 또는 -X 방향
     
-    ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 위로
+    ;; 경계선에 수직인 방향 (항상 바깥쪽으로)
+    (setq perp-angle (+ seg-angle (/ pi 2.0)))
+    
+    ;; 토류판 배치: 경계선에서 수직으로 timber-offset만큼 바깥쪽으로
     (princ (strcat "\n  [DEBUG] boundary-pt: (" (rtos (car boundary-pt) 2 2) ", " (rtos (cadr boundary-pt) 2 2) ")"))
+    (princ (strcat "\n  [DEBUG] seg-angle (deg): " (rtos (/ (* seg-angle 180) pi) 2 2)))
     (princ (strcat "\n  [DEBUG] perp-angle (rad): " (rtos perp-angle 2 4) " (deg): " (rtos (/ (* perp-angle 180) pi) 2 2)))
     (princ (strcat "\n  [DEBUG] timber-offset: " (rtos timber-offset 2 2)))
     (setq timber-pt (polar boundary-pt perp-angle timber-offset))
@@ -1615,10 +1617,12 @@
       (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
     )
     
-    ;; H-Pile 좌측 배치
+    ;; H-Pile 배치: 경계선에서 수직으로 hpile-offset만큼 바깥쪽으로
     (princ (strcat "\n  [DEBUG] hpile-offset: " (rtos hpile-offset 2 2)))
     (setq adjusted-pos (polar boundary-pt perp-angle hpile-offset))
     (princ (strcat "\n  [DEBUG] adjusted-pos: (" (rtos (car adjusted-pos) 2 2) ", " (rtos (cadr adjusted-pos) 2 2) ")"))
+    
+    ;; H-Pile 좌측 배치: 세그먼트를 따라 timber-width/2 만큼 왼쪽으로
     (setq hpile-left (polar adjusted-pos seg-angle (- (/ timber-width 2.0))))
     (princ (strcat "\n  [H-Pile좌] (" (rtos (car hpile-left) 2 2) ", " (rtos (cadr hpile-left) 2 2) ")"))
     
@@ -1632,7 +1636,7 @@
       (/ (* seg-angle 180) pi)
     )
     
-    ;; H-Pile 우측 배치
+    ;; H-Pile 우측 배치: 세그먼트를 따라 timber-width/2 만큼 오른쪽으로
     (setq hpile-right (polar adjusted-pos seg-angle (/ timber-width 2.0)))
     (princ (strcat "\n  [H-Pile우] (" (rtos (car hpile-right) 2 2) ", " (rtos (cadr hpile-right) 2 2) ")"))
     
