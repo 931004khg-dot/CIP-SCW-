@@ -1491,8 +1491,8 @@
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
   h b tw tf hpile-values timber-block hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
-  line-ent line-data pt1 pt2 mid-pt seg-angle original-area offset-area
-  last-before first-new current-ent ent-data)
+  line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
+  last-before first-new current-ent ent-data new-insert delete-count)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
@@ -1637,37 +1637,66 @@
     (setq mid-pt (list
       (/ (+ (car pt1) (car pt2)) 2.0)
       (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+      0.0  ; Z 좌표 명시
     ))
     
-    ;; 선분 각도 계산
+    ;; 선분 각도 계산 (라디안)
     (setq seg-angle (angle pt1 pt2))
+    (setq angle-deg (/ (* seg-angle 180.0) pi))  ; 도 단위로 변환
     
     ;; 임시 POINT 생성 (entmake 사용)
     (entmake
       (list
         '(0 . "POINT")
         (cons 10 mid-pt)
+        '(8 . "_토류판(timber)")  ; 레이어 지정
       )
     )
     (debug-log (strcat "POINT 생성: " (vl-princ-to-string mid-pt)))
     
-    (princ (strcat "\n  선분 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ") 각도=" (rtos (/ (* seg-angle 180) pi) 2 0) "deg"))
+    (princ (strcat "\n  선분 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ") 각도=" (rtos angle-deg 2 0) "deg"))
     
-    ;; 토류판 블록 배치
-    (command "._LAYER" "_S" "_토류판(timber)" "")
-    (command "._INSERT" 
-      timber-block
-      mid-pt
-      ""  ; X scale (엔터로 기본값 1)
-      ""  ; Y scale (엔터로 기본값 1)
-      (/ (* seg-angle 180) pi)  ; 각도 (도 단위)
+    ;; 토류판 블록 배치 - entmake 사용 (command 대신)
+    (setq new-insert 
+      (entmake
+        (list
+          '(0 . "INSERT")
+          (cons 2 timber-block)  ; 블록 이름
+          (cons 8 "_토류판(timber)")  ; 레이어
+          (cons 10 mid-pt)  ; 삽입점
+          '(41 . 1.0)  ; X 스케일
+          '(42 . 1.0)  ; Y 스케일
+          '(43 . 1.0)  ; Z 스케일
+          (cons 50 seg-angle)  ; 회전 각도 (라디안)
+        )
+      )
     )
-    (debug-log (strcat "토류판 배치 완료: " (vl-princ-to-string mid-pt) " 각도=" (rtos (/ (* seg-angle 180) pi) 2 0)))
+    (if new-insert
+      (debug-log (strcat "토류판 배치 완료: " (vl-princ-to-string mid-pt) " 각도=" (rtos angle-deg 2 0)))
+      (debug-log (strcat "토류판 배치 실패: " (vl-princ-to-string mid-pt)))
+    )
   )
   
   ;; ===== 4단계: H-Pile 배치 (기존 로직 유지) =====
   (princ "\n\n[4단계] H-Pile 배치는 추후 구현...")
   (debug-log "토류판 배치 완료, H-Pile 배치는 다음 단계")
+  
+  ;; ===== 5단계: EXPLODE된 LINE 객체 삭제 =====
+  (princ "\n\n[5단계] 임시 LINE 객체 삭제 중...")
+  (debug-log "EXPLODE된 LINE 객체 삭제 시작")
+  
+  (setq delete-count 0)
+  (foreach line-ent exploded-lines
+    (if (and line-ent (entget line-ent))  ; 엔티티가 유효한지 확인
+      (progn
+        (entdel line-ent)
+        (setq delete-count (1+ delete-count))
+      )
+    )
+  )
+  
+  (princ (strcat "\n  삭제된 LINE 개수: " (itoa delete-count)))
+  (debug-log (strcat "삭제된 LINE 개수: " (itoa delete-count)))
   
   (princ "\n\n토류판 배치 완료!")
   (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
