@@ -2042,14 +2042,14 @@
     
     ;; 아래 플랜지 면이 경계선과 일치하도록 삽입점 조정
     ;; 블록 기준점 = 아래 플랜지 중심 (0, -half-h)
-    ;; 경계선에서 경계선 안쪽 방향으로 44mm 이동
-    ;; 안쪽 방향 = 선분 각도 + 90도 (선분에 수직, 안쪽)
-    (setq inward-angle (+ seg-angle (/ pi 2.0)))
+    ;; 토류판 중앙에서 경계선 방향으로 44mm 이동
+    ;; 경계선 방향 = 선분 각도 - 90도 (선분에 수직, 경계선 쪽)
+    (setq boundary-direction (- seg-angle (/ pi 2.0)))
     (setq timber-offset 44.0)  ; 토류판 오프셋 (mm)
     
     (foreach hpile-pt hpile-positions
       ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
-      (setq adjusted-pt (polar hpile-pt inward-angle timber-offset))
+      (setq adjusted-pt (polar hpile-pt boundary-direction timber-offset))
       
       (entmake
         (list
