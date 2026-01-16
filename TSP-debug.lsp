@@ -2036,18 +2036,20 @@
     (debug-log (strcat "직선 구간 H-Pile 개수: " (itoa (length hpile-positions))))
     
     ;; 각 위치에 H-Pile INSERT
-    ;; 회전 각도 = 선분 각도 - 90도 (웹이 경계선 안쪽을 향하도록)
-    (setq hpile-rotation (- seg-angle (/ pi 2.0)))
+    ;; 회전 각도 = 선분 각도 (H-Pile이 선분과 평행)
+    ;; 위 플랜지가 경계선 바깥쪽, 아래 플랜지가 경계선 쪽
+    (setq hpile-rotation seg-angle)
     
     ;; 아래 플랜지 면이 경계선과 일치하도록 삽입점 조정
     ;; 블록 기준점 = 아래 플랜지 중심 (0, -half-h)
-    ;; 회전 후 경계선으로부터 half-h만큼 바깥쪽(회전 방향의 반대)으로 이동
-    ;; 바깥쪽 방향 = hpile-rotation + 180도 (회전 방향의 반대)
-    (setq outward-angle (+ hpile-rotation pi))
+    ;; 경계선에서 경계선 안쪽 방향으로 44mm 이동
+    ;; 안쪽 방향 = 선분 각도 + 90도 (선분에 수직, 안쪽)
+    (setq inward-angle (+ seg-angle (/ pi 2.0)))
+    (setq timber-offset 44.0)  ; 토류판 오프셋 (mm)
     
     (foreach hpile-pt hpile-positions
       ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
-      (setq adjusted-pt (polar hpile-pt outward-angle half-h))
+      (setq adjusted-pt (polar hpile-pt inward-angle timber-offset))
       
       (entmake
         (list
@@ -2062,7 +2064,8 @@
         )
       )
       (debug-log (strcat "직선 H-Pile 배치: 원래=" (rtos (car hpile-pt) 2 2) "," (rtos (cadr hpile-pt) 2 2) 
-                         " → 조정=" (rtos (car adjusted-pt) 2 2) "," (rtos (cadr adjusted-pt) 2 2)))
+                         " → 조정=" (rtos (car adjusted-pt) 2 2) "," (rtos (cadr adjusted-pt) 2 2) 
+                         ", 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
     )
   )
   
