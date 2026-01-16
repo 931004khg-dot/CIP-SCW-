@@ -149,15 +149,36 @@
   )
 )
 
-;; 폴리라인 폐합 여부 판별
+;; 폴리라인 폐합 여부 판별 (개선된 버전)
 ;; 반환값: T = 폐합선 (Closed), nil = 열린선 (Open)
-(defun is-closed-polyline (ent / ent-data closed-flag)
+;; 두 가지 방법으로 폐합 여부 확인:
+;; 1. DXF 코드 70의 bit 0 (Close 옵션으로 닫힌 경우)
+;; 2. 첫 번째와 마지막 꼭지점이 일치 (기하학적으로 닫힌 경우)
+(defun is-closed-polyline (ent / ent-data closed-flag vertices first-pt last-pt)
   (setq ent-data (entget ent))
-  ;; DXF 코드 70의 bit 0 = closed flag
+  
+  ;; 방법 1: DXF 코드 70의 bit 0 확인
   (setq closed-flag (cdr (assoc 70 ent-data)))
-  (if closed-flag
-    (= 1 (logand 1 closed-flag))
-    nil
+  (if (and closed-flag (= 1 (logand 1 closed-flag)))
+    T  ; DXF 플래그로 폐합 확인됨
+    ;; 방법 2: 첫/마지막 꼭지점 비교
+    (progn
+      (setq vertices '())
+      (foreach item ent-data
+        (if (= (car item) 10)
+          (setq vertices (append vertices (list (cdr item))))
+        )
+      )
+      (if (>= (length vertices) 2)
+        (progn
+          (setq first-pt (car vertices))
+          (setq last-pt (last vertices))
+          ;; 0.1mm 허용 오차로 일치 여부 확인
+          (equal first-pt last-pt 0.1)
+        )
+        nil  ; 꼭지점 부족
+      )
+    )
   )
 )
 

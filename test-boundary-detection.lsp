@@ -56,12 +56,32 @@
 
 ;; 필요한 유틸리티 함수들 (TSP-debug.lsp에서 복사)
 
-(defun is-closed-polyline (ent / ent-data closed-flag)
+;; 폴리라인 폐합 여부 판별 (개선된 버전)
+(defun is-closed-polyline (ent / ent-data closed-flag vertices first-pt last-pt)
   (setq ent-data (entget ent))
+  
+  ;; 방법 1: DXF 코드 70의 bit 0 확인
   (setq closed-flag (cdr (assoc 70 ent-data)))
-  (if closed-flag
-    (= 1 (logand 1 closed-flag))
-    nil
+  (if (and closed-flag (= 1 (logand 1 closed-flag)))
+    T  ; DXF 플래그로 폐합 확인됨
+    ;; 방법 2: 첫/마지막 꼭지점 비교
+    (progn
+      (setq vertices '())
+      (foreach item ent-data
+        (if (= (car item) 10)
+          (setq vertices (append vertices (list (cdr item))))
+        )
+      )
+      (if (>= (length vertices) 2)
+        (progn
+          (setq first-pt (car vertices))
+          (setq last-pt (last vertices))
+          ;; 0.1mm 허용 오차로 일치 여부 확인
+          (equal first-pt last-pt 0.1)
+        )
+        nil  ; 꼭지점 부족
+      )
+    )
   )
 )
 
