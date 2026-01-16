@@ -209,23 +209,45 @@
   )
 )
 
-;; 다각형의 중심점(Centroid) 계산
+;; 다각형의 기하학적 무게중심(Geometric Centroid) 계산
+;; 면적 기반 공식 사용 - 항상 다각형 내부에 위치
 ;; 반환값: (x y) 리스트
-(defun get-polygon-centroid (vertices / n i pt sum-x sum-y cx cy)
+(defun get-polygon-centroid (vertices / n i pt1 pt2 x1 y1 x2 y2 cross-term signed-area cx cy sum-cx sum-cy)
   (setq n (length vertices))
-  (setq sum-x 0.0)
-  (setq sum-y 0.0)
+  (setq signed-area 0.0)
+  (setq sum-cx 0.0)
+  (setq sum-cy 0.0)
   
+  ;; Shoelace 공식으로 면적과 무게중심 계산
   (setq i 0)
   (while (< i n)
-    (setq pt (nth i vertices))
-    (setq sum-x (+ sum-x (car pt)))
-    (setq sum-y (+ sum-y (cadr pt)))
+    (setq pt1 (nth i vertices))
+    (setq pt2 (nth (rem (+ i 1) n) vertices))
+    
+    (setq x1 (car pt1))
+    (setq y1 (cadr pt1))
+    (setq x2 (car pt2))
+    (setq y2 (cadr pt2))
+    
+    ;; cross-term = (x1 * y2 - x2 * y1)
+    (setq cross-term (- (* x1 y2) (* x2 y1)))
+    
+    (setq signed-area (+ signed-area cross-term))
+    (setq sum-cx (+ sum-cx (* (+ x1 x2) cross-term)))
+    (setq sum-cy (+ sum-cy (* (+ y1 y2) cross-term)))
+    
     (setq i (+ i 1))
   )
   
-  (setq cx (/ sum-x n))
-  (setq cy (/ sum-y n))
+  ;; signed-area는 2배 면적이므로 2로 나눔
+  (setq signed-area (/ signed-area 2.0))
+  
+  ;; 무게중심 = sum / (6 * area)
+  (setq cx (/ sum-cx (* 6.0 signed-area)))
+  (setq cy (/ sum-cy (* 6.0 signed-area)))
+  
+  (debug-log (strcat "면적 기반 무게중심 계산 - Area: " (rtos signed-area 2 2) 
+                     ", Cx: " (rtos cx 2 2) ", Cy: " (rtos cy 2 2)))
   
   (list cx cy)
 )
@@ -2254,20 +2276,39 @@
   
   (princ "\n토류판 배치 완료!")
   
-  ;; ===== 3.5단계: 직선 구간에 H-Pile 배치 (토류판 사이 중앙) =====
-  (princ "\n\n[3.5단계] 직선 구간에 H-Pile 배치 (토류판 사이 중앙)...")
-  (debug-log "=== 3.5단계: 직선 구간 H-Pile 배치 시작 ===")
+  ;; ===== 3.5단계: 직선 구간에 H-Pile 배치 (원본 경계선 기준) =====
+  (princ "\n\n[3.5단계] 직선 구간에 H-Pile 배치 (원본 경계선 기준)...")
+  (debug-log "=== 3.5단계: 원본 경계선 기준 H-Pile 배치 시작 ===")
   
-  (foreach line-ent exploded-lines
-    (setq line-data (entget line-ent))
-    (setq pt1 (cdr (assoc 10 line-data)))
-    (setq pt2 (cdr (assoc 11 line-data)))
+  ;; 원본 경계선의 세그먼트를 기준으로 H-Pile 배치
+  (setq boundary-data (entget boundary-ent))
+  (setq orig-vertices '())
+  (foreach item boundary-data
+    (if (= (car item) 10)
+      (setq orig-vertices (append orig-vertices (list (cdr item))))
+    )
+  )
+  
+  ;; 닫힌 폴리라인: 첫/마지막 꼭지점이 같으면 마지막 제거
+  (if (and (> (length orig-vertices) 1)
+           (equal (car orig-vertices) (last orig-vertices) 0.01))
+    (setq orig-vertices (reverse (cdr (reverse orig-vertices))))
+  )
+  
+  (debug-log (strcat "원본 경계선 꼭지점 개수: " (itoa (length orig-vertices))))
+  
+  ;; 각 세그먼트별로 H-Pile 배치
+  (setq seg-idx 0)
+  (setq n-verts (length orig-vertices))
+  (while (< seg-idx n-verts)
+    (setq pt1 (nth seg-idx orig-vertices))
+    (setq pt2 (nth (rem (+ seg-idx 1) n-verts) orig-vertices))
     
-    ;; 선분 길이와 각도 계산
+    ;; 선분 길이와 각도 계산 (원본 경계선 기준)
     (setq seg-length (distance pt1 pt2))
     (setq seg-angle (angle pt1 pt2))
     
-    ;; 중점 계산
+    ;; 중점 계산 (원본 경계선 기준)
     (setq mid-pt (list
       (/ (+ (car pt1) (car pt2)) 2.0)
       (/ (+ (cadr pt1) (cadr pt2)) 2.0)
@@ -2282,7 +2323,7 @@
     (setq num-left (fix (/ half-length ctc-mm)))
     (setq num-right (fix (/ half-length ctc-mm)))
     
-    ;; H-Pile 배치 위치 리스트 생성 (토류판 사이 = C.T.C/2 오프셋)
+    ;; H-Pile 배치 위치 리스트 생성 (원본 경계선 기준, C.T.C/2 오프셋)
     (setq hpile-positions '())
     
     ;; 왼쪽 방향 (음수)
@@ -2320,20 +2361,18 @@
     )
     
     (if (> (length hpile-positions) 0)
-      (princ (strcat "\n  직선 H-Pile: " (itoa (length hpile-positions)) "개"))
+      (princ (strcat "\n  세그먼트" (itoa seg-idx) " H-Pile: " (itoa (length hpile-positions)) "개"))
     )
     
-    ;; 외부 법선 방향 계산 (웹이 향할 방향)
+    ;; 외부 법선 방향 계산 (원본 경계선 기준)
     ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90도)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
     ;; H-Pile 회전 = 경계선 방향 (웹이 수직을 유지하도록)
-    ;; H-Pile 블록은 기본적으로 웹이 수직(Y축)이므로
-    ;; 경계선 방향으로 회전시키면 웹도 경계선과 평행하게 됨
     (setq hpile-rotation seg-angle)
     
     (foreach hpile-pt hpile-positions
-      ;; 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
+      ;; 하부 플랜지가 원본 경계선에 닿도록 tf만큼만 바깥으로 오프셋
       (setq insert-pt (polar hpile-pt outward-normal tf))
       
       (entmake
@@ -2349,6 +2388,8 @@
         )
       )
     )
+    
+    (setq seg-idx (1+ seg-idx))
   )
   
   (princ "\n직선 H-Pile 배치 완료!")

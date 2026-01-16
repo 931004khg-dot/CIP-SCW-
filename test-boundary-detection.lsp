@@ -153,22 +153,41 @@
   )
 )
 
-;; 다각형의 중심점(Centroid) 계산
-(defun get-polygon-centroid (vertices / n i pt sum-x sum-y cx cy)
+;; 다각형의 기하학적 무게중심(Geometric Centroid) 계산
+;; 면적 기반 공식 사용 - 항상 다각형 내부에 위치
+(defun get-polygon-centroid (vertices / n i pt1 pt2 x1 y1 x2 y2 cross-term signed-area cx cy sum-cx sum-cy)
   (setq n (length vertices))
-  (setq sum-x 0.0)
-  (setq sum-y 0.0)
+  (setq signed-area 0.0)
+  (setq sum-cx 0.0)
+  (setq sum-cy 0.0)
   
+  ;; Shoelace 공식으로 면적과 무게중심 계산
   (setq i 0)
   (while (< i n)
-    (setq pt (nth i vertices))
-    (setq sum-x (+ sum-x (car pt)))
-    (setq sum-y (+ sum-y (cadr pt)))
+    (setq pt1 (nth i vertices))
+    (setq pt2 (nth (rem (+ i 1) n) vertices))
+    
+    (setq x1 (car pt1))
+    (setq y1 (cadr pt1))
+    (setq x2 (car pt2))
+    (setq y2 (cadr pt2))
+    
+    ;; cross-term = (x1 * y2 - x2 * y1)
+    (setq cross-term (- (* x1 y2) (* x2 y1)))
+    
+    (setq signed-area (+ signed-area cross-term))
+    (setq sum-cx (+ sum-cx (* (+ x1 x2) cross-term)))
+    (setq sum-cy (+ sum-cy (* (+ y1 y2) cross-term)))
+    
     (setq i (+ i 1))
   )
   
-  (setq cx (/ sum-x n))
-  (setq cy (/ sum-y n))
+  ;; signed-area는 2배 면적이므로 2로 나눔
+  (setq signed-area (/ signed-area 2.0))
+  
+  ;; 무게중심 = sum / (6 * area)
+  (setq cx (/ sum-cx (* 6.0 signed-area)))
+  (setq cy (/ sum-cy (* 6.0 signed-area)))
   
   (list cx cy)
 )
