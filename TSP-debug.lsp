@@ -209,6 +209,66 @@
   )
 )
 
+;; 경계선 방향 판별 함수 (폐합선/열린선 자동 처리)
+;; 반환값: 1 = CCW (왼쪽=바깥), -1 = CW (오른쪽=바깥)
+(defun determine-boundary-orientation (boundary-ent / vertices pt1 pt2 user-pt cross-z)
+  (princ "\n\n[방향 판별] 경계선 타입 및 방향 판단...")
+  (setq vertices (extract-vertices boundary-ent))
+  
+  (if (is-closed-polyline boundary-ent)
+    ;; 폐합선: 자동으로 방향 계산
+    (progn
+      (princ "\n- 폐합 다각형 감지")
+      (setq boundary-orient (get-polygon-orientation vertices))
+      (if (= boundary-orient 1)
+        (princ "\n- CCW(반시계): 외부 방향 자동 계산 (왼쪽 = 바깥)")
+        (princ "\n- CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
+      )
+      (debug-log (strcat "폐합선 - 자동 방향: " (if (= boundary-orient 1) "CCW" "CW")))
+      
+      ;; 폐합선 내부에 노란색 원 생성 (시각화)
+      (princ "\n- 경계선 내부 시각화 중...")
+      (create-interior-circle boundary-ent vertices)
+      
+      boundary-orient  ; 반환
+    )
+    
+    ;; 열린선: 사용자에게 클릭 요청
+    (progn
+      (princ "\n- 열린 경계선 감지")
+      (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
+      (setq user-pt (getpoint))
+      
+      ;; 첫 번째 선분 기준으로 외적 공식으로 좌/우 판별
+      (setq pt1 (car vertices))
+      (setq pt2 (cadr vertices))
+      
+      ;; 외적 공식: S = (x2-x1)*(y-y1) - (y2-y1)*(x-x1)
+      ;; S > 0: 왼쪽 (CCW), S < 0: 오른쪽 (CW)
+      (setq cross-z 
+        (- (* (- (car pt2) (car pt1)) 
+              (- (cadr user-pt) (cadr pt1)))
+           (* (- (cadr pt2) (cadr pt1)) 
+              (- (car user-pt) (car pt1))))
+      )
+      
+      (if (> cross-z 0)
+        (progn
+          (setq boundary-orient 1)   ; 왼쪽 클릭 = CCW
+          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
+        )
+        (progn
+          (setq boundary-orient -1)  ; 오른쪽 클릭 = CW
+          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
+        )
+      )
+      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "왼쪽(CCW)" "오른쪽(CW)")))
+      
+      boundary-orient  ; 반환
+    )
+  )
+)
+
 ;; 다각형의 기하학적 무게중심(Geometric Centroid) 계산
 ;; 면적 기반 공식 사용 - 항상 다각형 내부에 위치
 ;; 반환값: (x y) 리스트
@@ -606,9 +666,16 @@
 )
 
 ;; create-wale-offsets 재정의
-(defun create-wale-offsets (boundary-ent wale-spec / h b tw tf offset-list obj1 obj2 obj3 obj4 wale-values boundary-vla obj2-vla obj3-vla obj4-vla original-area offset-area)
+(defun create-wale-offsets (boundary-ent wale-spec boundary-orient / h b tw tf offset-list obj1 obj2 obj3 obj4 wale-values boundary-vla obj2-vla obj3-vla obj4-vla original-area offset-area offset-sign)
   (debug-log "=== create-wale-offsets 시작 ===")
   (debug-log (strcat "wale-spec: " wale-spec))
+  (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
+  
+  ;; 오프셋 부호 결정 (띠장은 안쪽이므로 반대 방향)
+  ;; CCW (boundary-orient=1): -1 = 안쪽
+  ;; CW (boundary-orient=-1): +1 = 안쪽
+  (setq offset-sign (- boundary-orient))
+  (debug-log (strcat "띠장 오프셋 부호 (안쪽): " (if (= offset-sign 1) "+" "-")))
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
@@ -1046,7 +1113,7 @@
 )
 
 ;; C:TSP 재정의
-(defun C:TSP (/ dcl-path dcl-id main-result hpile-result boundary-ent)
+(defun C:TSP (/ dcl-path dcl-id main-result hpile-result boundary-ent boundary-orient)
   ;; 디버그 로그 초기화
   (debug-clear)
   
@@ -1112,13 +1179,17 @@
              (debug-log (strcat "경계선 엔티티: " (vl-princ-to-string boundary-ent)))
              (debug-log (strcat "엔티티 타입: " (cdr (assoc 0 (entget boundary-ent)))))
              
-             ;; 띠장 옵셋 생성
-             (create-wale-offsets boundary-ent *tsp-wale-spec*)
+             ;; ★★★ 1단계: 방향 판별 (띠장/H-Pile 생성 전) ★★★
+             (setq boundary-orient (determine-boundary-orientation boundary-ent))
+             (debug-log (strcat "판별된 방향: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
              
-             ;; H-Pile 세트 생성 (경계선의 가장 긴 세그먼트 중간에 생성)
+             ;; ★★★ 2단계: 띠장 옵셋 생성 (방향 전달) ★★★
+             (create-wale-offsets boundary-ent *tsp-wale-spec* boundary-orient)
+             
+             ;; ★★★ 3단계: H-Pile 세트 생성 (방향 전달) ★★★
              (princ "\n\n>>> H-Pile 세트 생성 시작...")
              (debug-log "=== H-Pile 세트 생성 시작 ===")
-             (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc*)
+             (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc* boundary-orient)
              
              (princ "\n========================================")
              (princ "\n작업 완료!")
@@ -1212,10 +1283,11 @@
 )
 
 ;; create-hpile-set-on-boundary 재정의
-(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt)
+(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc boundary-orient / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt)
   (debug-log "=== create-hpile-set-on-boundary 시작 ===")
   (debug-log (strcat "H-Pile 규격: " hpile-spec))
   (debug-log (strcat "C.T.C: " (rtos ctc 2 2) "m"))
+  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
   ;; 가장 긴 세그먼트 찾기
   (setq longest-seg (get-longest-segment boundary-ent))
@@ -1259,8 +1331,8 @@
           (debug-log (strcat "H-Pile 중심 (조정 후): (" (rtos (car offset-pt) 2 2) ", " (rtos (cadr offset-pt) 2 2) ")"))
           (debug-log (strcat "하단 플랜지 Y 좌표: " (rtos (cadr mid-pt) 2 2) " (경계선)"))
           
-          ;; 경계선 전체에 H-Pile+토류판 배치
-          (place-hpile-timber-along-boundary boundary-ent hpile-spec ctc *tsp-timber-thickness*)
+          ;; 경계선 전체에 H-Pile+토류판 배치 (방향 전달)
+          (place-hpile-timber-along-boundary boundary-ent hpile-spec ctc *tsp-timber-thickness* boundary-orient)
           (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
         )
         (progn
@@ -1985,8 +2057,8 @@
 ;;; 경계선 따라 배치 함수
 ;;; ----------------------------------------------------------------------
 
-;; 경계선을 따라 H-Pile+토류판 배치 (새로운 로직)
-(defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
+;; 경계선을 따라 H-Pile+토류판 배치 (방향 전달받음)
+(defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness boundary-orient / 
   h b tw tf hpile-values hpile-block timber-width half-h 
   timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
   line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
@@ -1994,63 +2066,11 @@
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
   dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
   boundary-copy last-before-boundary first-new-boundary boundary-lines
-  boundary-orient offset-sign user-pt left-test-pt v1 v2 cross-z
+  offset-sign orig-vertices seg-idx n-verts
   outward-normal insert-pt hpile-positions hpile-pt hpile-rotation)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
-  
-  ;; ===== 경계선 타입 판별 및 방향 결정 =====
-  (princ "\n\n[0단계] 경계선 타입 및 방향 판단...")
-  (setq vertices (extract-vertices boundary-ent))
-  
-  (if (is-closed-polyline boundary-ent)
-    ;; 폐합선: 자동으로 방향 계산
-    (progn
-      (princ "\n- 폐합 다각형 감지")
-      (setq boundary-orient (get-polygon-orientation vertices))
-      (if (= boundary-orient 1)
-        (princ "\n- CCW(반시계): 외부 방향 자동 계산 (왼쪽 = 바깥)")
-        (princ "\n- CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
-      )
-      (debug-log (strcat "폐합선 - 자동 방향: " (if (= boundary-orient 1) "CCW" "CW")))
-      
-      ;; 폐합선 내부에 노란색 원 생성 (시각화)
-      (princ "\n- 경계선 내부 시각화 중...")
-      (create-interior-circle boundary-ent vertices)
-    )
-    
-    ;; 열린선: 사용자에게 클릭 요청
-    (progn
-      (princ "\n- 열린 경계선 감지")
-      (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
-      (setq user-pt (getpoint))
-      
-      ;; 첫 번째 선분 기준으로 외적 공식으로 좌/우 판별
-      (setq pt1 (car vertices))
-      (setq pt2 (cadr vertices))
-      
-      ;; 외적 공식: S = (x2-x1)*(y-y1) - (y2-y1)*(x-x1)
-      ;; S > 0: 왼쪽 (CCW), S < 0: 오른쪽 (CW)
-      (setq cross-z 
-        (- (* (- (car pt2) (car pt1)) 
-              (- (cadr user-pt) (cadr pt1)))
-           (* (- (cadr pt2) (cadr pt1)) 
-              (- (car user-pt) (car pt1))))
-      )
-      
-      (if (> cross-z 0)
-        (progn
-          (setq boundary-orient 1)   ; 왼쪽 클릭 = CCW
-          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
-        )
-        (progn
-          (setq boundary-orient -1)  ; 오른쪽 클릭 = CW
-          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
-        )
-      )
-      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "왼쪽(CCW)" "오른쪽(CW)")))
-    )
-  )
+  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
   ;; 오프셋 부호 결정
   ;; boundary-orient: 1 = CCW (왼쪽=바깥), -1 = CW (오른쪽=바깥)
