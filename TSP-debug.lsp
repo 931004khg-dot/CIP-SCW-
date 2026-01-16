@@ -1785,18 +1785,18 @@
   
   ;; H-Pile 회전 각도 및 삽입점 계산
   ;; 블록 기준점 = 아래 플랜지 중심
-  ;; 웹 방향이 띠장 모서리를 향해야 함
+  ;; 웹 방향이 경계선 바깥쪽(띠장 모서리 반대 방향)을 향해야 함
   (if is-convex
     (progn
-      ;; 볼록 모서리: 회전 = 띠장방향 - 90도
+      ;; 볼록 모서리: 회전 = 띠장방향 + 90도 (반대 방향)
       (setq insert-point vertex)
-      (setq hpile-rotation (- wale-corner-angle (/ pi 2.0)))
+      (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
     )
     (progn
-      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 + 90도
+      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 - 90도 (반대 방향)
       (setq offset-dir (+ wale-corner-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
-      (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
+      (setq hpile-rotation (- wale-corner-angle (/ pi 2.0)))
     )
   )
   
@@ -1810,8 +1810,8 @@
   
   ;; 로그 출력
   (if is-convex
-    (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
-    (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
+    (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향+90)"))
+    (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
   )
   
   ;; (시각화 제거됨)
