@@ -1646,64 +1646,40 @@
   interior-angle exterior-angle bisector-angle is-convex half-h half-b 
   hpile-rotation insert-point offset-dir)
   
-  (debug-log (strcat "=== 모서리 H-Pile 배치: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ") ==="))
-  
-  (debug-log (strcat "각도1 (prev→curr): " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
-  (debug-log (strcat "각도2 (curr→next): " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
-  
   ;; H-Pile 크기
   (setq half-h (/ h 2.0))  ; 149 mm
   (setq half-b (/ b 2.0))  ; 100.5 mm
   
   ;; 내각 계산
-  ;; angle1 = 이전 선분 방향 (prev → curr)
-  ;; angle2 = 다음 선분 방향 (curr → next)
-  ;; 외각 = angle2 - angle1 (CCW 회전량)
   (setq exterior-angle (- angle2 angle1))
   (if (< exterior-angle 0)
     (setq exterior-angle (+ exterior-angle (* 2 pi)))
   )
   (setq interior-angle (- (* 2 pi) exterior-angle))
   
-  (debug-log (strcat "외각: " (rtos (* exterior-angle (/ 180.0 pi)) 2 1) "도"))
-  (debug-log (strcat "내각: " (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
-  
   ;; 볼록/오목 판단 (내각 < 180도 → 볼록)
   (setq is-convex (< interior-angle pi))
-  (debug-log (if is-convex "[OK] 볼록(Convex) 꼭지점" "[OK] 오목(Concave) 꼭지점"))
   
   ;; 각의 이등분선 계산 (경계선 내부 방향)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
-  (debug-log (strcat "이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; H-Pile 회전 각도 계산
+  ;; H-Pile 회전 각도 및 삽입점 계산
   ;; 블록 기준점 = 아래 플랜지 중심
-  ;; H-Pile 중심 → 아래 플랜지 중심 = 웹 방향 (세로 축)
-  ;; 이 방향이 경계선 안쪽(이등분선 방향)을 향해야 함
-  ;; 따라서: 회전 = 이등분선 각도 - 90도
-  (setq hpile-rotation (- bisector-angle (/ pi 2.0)))
-  (debug-log (strcat "H-Pile 회전 각도 (이등분선 - 90도): " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
-  
-  ;; 삽입점 계산 (블록 기준점 = 아래 플랜지 중심)
+  ;; 웹 방향이 띠장 모서리(이등분선 방향)를 향해야 함
   (if is-convex
     (progn
-      ;; 볼록 모서리: 플랜지 밑면 중앙이 모서리(vertex)와 일치
-      ;; 블록 기준점이 아래 플랜지 중심이므로, vertex가 바로 삽입점
+      ;; 볼록 모서리: 회전 = 이등분선 각도
       (setq insert-point vertex)
-      (debug-log "볼록: 플랜지 밑면 중앙 = 모서리")
+      (setq hpile-rotation bisector-angle)
     )
     (progn
-      ;; 오목 모서리: 
-      ;; 1) 먼저 vertex에 배치 (플랜지 밑면 중앙 = vertex)
-      ;; 2) 경계선 바깥쪽(이등분선 반대 방향)으로 B/2 오프셋
-      (setq offset-dir (+ bisector-angle pi))  ; 이등분선 반대 방향
+      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 이등분선 + 180도
+      (setq offset-dir (+ bisector-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
-      (debug-log (strcat "오목: B/2 오프셋 = " (rtos half-b 2 2) "mm, 방향 = " (rtos (* offset-dir (/ 180.0 pi)) 2 1) "도"))
+      (setq hpile-rotation offset-dir)
+      (debug-log (strcat "오목 모서리: B/2 오프셋=" (rtos half-b 2 2) "mm"))
     )
   )
-  
-  (debug-log (strcat "삽입점: (" (rtos (car insert-point) 2 2) ", " (rtos (cadr insert-point) 2 2) ")"))
-  (debug-log (strcat "회전 각도: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
   
   ;; H-Pile 블록 INSERT
   (entmake
@@ -1718,8 +1694,6 @@
       (cons 50 hpile-rotation)
     )
   )
-  
-  (debug-log "[OK] H-Pile 배치 완료")
 )
 
 ;;; ----------------------------------------------------------------------
@@ -1868,7 +1842,6 @@
   
   ;; ===== 3단계: 각 LINE을 따라 C.T.C 간격으로 POINT 생성 + 토류판 배치 =====
   (princ "\n\n[3단계] 각 선분을 따라 C.T.C 간격으로 토류판 배치...")
-  (debug-log "=== 3단계: C.T.C 간격 POINT 생성 시작 ===")
   
   (foreach line-ent exploded-lines
     (setq line-data (entget line-ent))
@@ -1878,7 +1851,6 @@
     ;; 선분 길이와 각도 계산
     (setq seg-length (distance pt1 pt2))
     (setq seg-angle (angle pt1 pt2))
-    (setq angle-deg (/ (* seg-angle 180.0) pi))
     
     ;; 중점 계산
     (setq mid-pt (list
@@ -1887,9 +1859,6 @@
       0.0
     ))
     
-    (princ (strcat "\n\n  선분 길이: " (rtos seg-length 2 2) "mm, 각도=" (rtos angle-deg 2 0) "deg"))
-    (debug-log (strcat "선분 길이: " (rtos seg-length 2 2) "mm, 각도=" (rtos angle-deg 2 0) "deg"))
-    
     ;; C.T.C 간격 (mm 단위)
     (setq ctc-mm (* ctc 1000.0))
     
@@ -1897,9 +1866,6 @@
     (setq half-length (/ seg-length 2.0))
     (setq num-left (fix (/ half-length ctc-mm)))   ; 왼쪽 개수
     (setq num-right (fix (/ half-length ctc-mm)))  ; 오른쪽 개수
-    
-    (princ (strcat "\n  C.T.C=" (rtos ctc-mm 2 0) "mm, 중점 기준 좌=" (itoa num-left) "개, 우=" (itoa num-right) "개"))
-    (debug-log (strcat "C.T.C=" (rtos ctc-mm 2 0) "mm, 좌=" (itoa num-left) "개, 우=" (itoa num-right) "개"))
     
     ;; 포인트 리스트 생성
     (setq point-list '())
@@ -1914,7 +1880,7 @@
       (setq dist-from-pt1 (distance pt1 new-pt))
       (setq dist-from-pt2 (distance pt2 new-pt))
       
-      ;; pt1과 pt2 사이에 있는지 확인 (거리 합이 선분 길이와 거의 같으면 선분 위)
+      ;; pt1과 pt2 사이에 있는지 확인
       (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
         (setq point-list (append point-list (list new-pt)))
       )
@@ -1943,8 +1909,9 @@
       (setq i (1+ i))
     )
     
-    (princ (strcat "\n  생성된 포인트 개수: " (itoa (length point-list))))
-    (debug-log (strcat "생성된 포인트 개수: " (itoa (length point-list))))
+    (if (> (length point-list) 0)
+      (princ (strcat "\n  토류판: " (itoa (length point-list)) "개"))
+    )
     
     ;; 각 포인트에 POINT 생성 + 토류판 객체 배치
     (foreach pt point-list
@@ -1956,16 +1923,13 @@
           '(8 . "_토류판(timber)")
         )
       )
-      (debug-log (strcat "POINT 생성: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
       
-      ;; 토류판 개별 객체 생성 (블록 대신 직접 생성)
+      ;; 토류판 개별 객체 생성
       (create-timber-panel-object pt timber-width timber-thickness seg-angle)
-      (debug-log (strcat "토류판 객체 생성: (" (rtos (car pt) 2 2) ", " (rtos (cadr pt) 2 2) ")"))
     )
   )
   
-  (princ "\n\n토류판 배치 완료!")
-  (debug-log "=== 3단계 완료 ===")
+  (princ "\n토류판 배치 완료!")
   
   ;; ===== 3.5단계: 직선 구간에 H-Pile 배치 (토류판 사이 중앙) =====
   (princ "\n\n[3.5단계] 직선 구간에 H-Pile 배치 (토류판 사이 중앙)...")
@@ -2032,19 +1996,12 @@
       (setq i (1+ i))
     )
     
-    (princ (strcat "\n  직선 구간 H-Pile 개수: " (itoa (length hpile-positions))))
-    (debug-log (strcat "직선 구간 H-Pile 개수: " (itoa (length hpile-positions))))
+    (if (> (length hpile-positions) 0)
+      (princ (strcat "\n  직선 H-Pile: " (itoa (length hpile-positions)) "개"))
+    )
     
     ;; 각 위치에 H-Pile INSERT
-    ;; 회전 각도 = 선분 각도 (H-Pile이 선분과 평행)
-    ;; 위 플랜지가 경계선 바깥쪽, 아래 플랜지가 경계선 쪽
     (setq hpile-rotation seg-angle)
-    
-    ;; 아래 플랜지 면이 경계선과 일치하도록 삽입점 조정
-    ;; 블록 기준점 = 아래 플랜지 중심 (0, -half-h)
-    ;; 토류판 중앙에서 경계선 방향으로 timber-offset 만큼 이동
-    ;; timber-offset = (토류판 두께/2) + tf (이미 Line 1760에서 계산됨)
-    ;; 경계선 방향 = 선분 각도 - 90도 (선분에 수직, 경계선 쪽)
     (setq boundary-direction (- seg-angle (/ pi 2.0)))
     
     (foreach hpile-pt hpile-positions
@@ -2063,15 +2020,10 @@
           (cons 50 hpile-rotation)
         )
       )
-      (debug-log (strcat "직선 H-Pile 배치: 원래=" (rtos (car hpile-pt) 2 2) "," (rtos (cadr hpile-pt) 2 2) 
-                         " → 조정=" (rtos (car adjusted-pt) 2 2) "," (rtos (cadr adjusted-pt) 2 2) 
-                         ", 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"
-                         ", 오프셋=" (rtos timber-offset 2 2) "mm"))
     )
   )
   
-  (princ "\n직선 구간 H-Pile 배치 완료!")
-  (debug-log "=== 3.5단계 완료 ===")
+  (princ "\n직선 H-Pile 배치 완료!")
   
   ;; ===== 4단계: 모서리(꼭지점)에 H-Pile 배치 =====
   (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
@@ -2086,8 +2038,13 @@
     )
   )
   
+  ;; 닫힌 폴리라인: 첫 번째와 마지막 꼭지점이 같으면 마지막 제거
+  (if (and (> (length vertices) 1)
+           (equal (car vertices) (last vertices) 0.01))
+    (setq vertices (reverse (cdr (reverse vertices))))
+  )
+  
   (princ (strcat "\n  경계선 꼭지점 개수: " (itoa (length vertices))))
-  (debug-log (strcat "경계선 꼭지점 개수: " (itoa (length vertices))))
   
   ;; 각 꼭지점에 H-Pile 배치 (이전/현재/다음 꼭지점 사용)
   (setq i 0)
@@ -2106,18 +2063,14 @@
     
     (setq i (+ i 1))
   )
-  (debug-log "원본 경계선 EXPLODE LINE 삭제 완료")
   
   (princ "\n모서리 H-Pile 배치 완료!")
-  (debug-log "=== 4단계 완료 ===")
+  
   
   ;; ===== 5단계: EXPLODE된 LINE 객체 삭제 =====
-  (princ "\n\n[5단계] 임시 LINE 객체 삭제 중...")
-  (debug-log "EXPLODE된 LINE 객체 삭제 시작")
-  
   (setq delete-count 0)
   (foreach line-ent exploded-lines
-    (if (and line-ent (entget line-ent))  ; 엔티티가 유효한지 확인
+    (if (and line-ent (entget line-ent))
       (progn
         (entdel line-ent)
         (setq delete-count (1+ delete-count))
@@ -2125,11 +2078,7 @@
     )
   )
   
-  (princ (strcat "\n  삭제된 LINE 개수: " (itoa delete-count)))
-  (debug-log (strcat "삭제된 LINE 개수: " (itoa delete-count)))
-  
-  (princ "\n\n토류판 배치 완료!")
-  (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
+  (princ "\n\n작업 완료!")
 )
 
 ;; 경계선 방향 판단 (CW/CCW)
