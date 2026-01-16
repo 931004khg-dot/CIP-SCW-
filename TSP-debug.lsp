@@ -85,6 +85,98 @@
 )
 
 ;;; ----------------------------------------------------------------------
+;;; 기하학 유틸리티 함수 (다각형 방향 판단)
+;;; ----------------------------------------------------------------------
+
+;; 엔티티에서 꼭지점 추출
+(defun extract-vertices (ent / ent-data vertices item first-pt last-pt)
+  (debug-log "=== extract-vertices 시작 ===")
+  (setq ent-data (entget ent))
+  (setq vertices '())
+  
+  ;; DXF 코드 10 = 꼭지점 좌표
+  (foreach item ent-data
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
+    )
+  )
+  
+  ;; 닫힌 폴리라인: 첫 번째와 마지막이 같으면 마지막 제거
+  (if (and (> (length vertices) 1)
+           (setq first-pt (car vertices))
+           (setq last-pt (last vertices))
+           (equal first-pt last-pt 0.01))
+    (setq vertices (reverse (cdr (reverse vertices))))
+  )
+  
+  (debug-log (strcat "추출된 꼭지점 개수: " (itoa (length vertices))))
+  vertices
+)
+
+;; 다각형 방향 판단 (Shoelace 공식 - Signed Area)
+;; 반환값: 1 = CCW (반시계방향), -1 = CW (시계방향)
+(defun get-polygon-orientation (vertices / signed-area i n x1 y1 x2 y2)
+  (debug-log "=== get-polygon-orientation 시작 ===")
+  (setq signed-area 0.0)
+  (setq n (length vertices))
+  (setq i 0)
+  
+  ;; Shoelace 공식: Σ (x[i] - x[i+1]) * (y[i] + y[i+1])
+  (while (< i n)
+    (setq x1 (car (nth i vertices)))
+    (setq y1 (cadr (nth i vertices)))
+    (setq x2 (car (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    (setq y2 (cadr (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    
+    (setq signed-area (+ signed-area (* (- x1 x2) (+ y1 y2))))
+    (setq i (1+ i))
+  )
+  
+  (debug-log (strcat "Signed Area: " (rtos signed-area 2 2)))
+  
+  ;; 양수 = CCW, 음수 = CW
+  (if (> signed-area 0)
+    (progn
+      (debug-log "다각형 방향: CCW (반시계방향)")
+      (princ "\n[기하] 다각형 방향: CCW (반시계방향) - 진행방향의 왼쪽이 내부")
+      1
+    )
+    (progn
+      (debug-log "다각형 방향: CW (시계방향)")
+      (princ "\n[기하] 다각형 방향: CW (시계방향) - 진행방향의 오른쪽이 내부")
+      -1
+    )
+  )
+)
+
+;; 벡터 외적으로 모서리 볼록/오목 판단
+;; 반환값: T = 볼록 (Convex), nil = 오목 (Concave)
+(defun is-corner-convex (prev-pt curr-pt next-pt orientation / 
+  v1x v1y v2x v2y cross-product)
+  
+  ;; 벡터 1: prev → curr
+  (setq v1x (- (car curr-pt) (car prev-pt)))
+  (setq v1y (- (cadr curr-pt) (cadr prev-pt)))
+  
+  ;; 벡터 2: curr → next
+  (setq v2x (- (car next-pt) (car curr-pt)))
+  (setq v2y (- (cadr next-pt) (cadr curr-pt)))
+  
+  ;; 외적 (cross product): v1 × v2 = v1x*v2y - v1y*v2x
+  (setq cross-product (- (* v1x v2y) (* v1y v2x)))
+  
+  (debug-log (strcat "외적 값: " (rtos cross-product 2 2)))
+  
+  ;; 다각형 방향에 따라 판단
+  ;; CCW (orientation=1): cross > 0 → 왼쪽으로 꺾임 → 볼록
+  ;; CW (orientation=-1): cross < 0 → 오른쪽으로 꺾임 → 볼록
+  (if (= orientation 1)
+    (> cross-product 0)  ; CCW
+    (< cross-product 0)  ; CW
+  )
+)
+
+;;; ----------------------------------------------------------------------
 ;;; 기존 함수 재정의 (디버깅 기능 추가)
 ;;; ----------------------------------------------------------------------
 
