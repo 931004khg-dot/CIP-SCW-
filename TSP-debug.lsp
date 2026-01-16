@@ -1644,11 +1644,15 @@
 ;; 모서리(꼭지점)에 H-Pile 배치 (블록 기준점 사용 - 아래 플랜지 중심)
 (defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block / 
   interior-angle exterior-angle bisector-angle is-convex half-h half-b 
-  hpile-rotation insert-point offset-dir)
+  hpile-rotation insert-point offset-dir bisector-end)
   
   ;; H-Pile 크기
   (setq half-h (/ h 2.0))  ; 149 mm
   (setq half-b (/ b 2.0))  ; 100.5 mm
+  
+  ;; 디버그: 꼭지점 및 각도 출력
+  (princ (strcat "\n[모서리] 꼭지점: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ")"))
+  (princ (strcat "\n  angle1=" (rtos (* angle1 (/ 180.0 pi)) 2 1) "도, angle2=" (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
   ;; 내각 계산
   (setq exterior-angle (- angle2 angle1))
@@ -1657,11 +1661,15 @@
   )
   (setq interior-angle (- (* 2 pi) exterior-angle))
   
+  (princ (strcat "\n  외각=" (rtos (* exterior-angle (/ 180.0 pi)) 2 1) "도, 내각=" (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
+  
   ;; 볼록/오목 판단 (내각 < 180도 → 볼록)
   (setq is-convex (< interior-angle pi))
+  (princ (if is-convex "\n  타입: 볼록(Convex)" "\n  타입: 오목(Concave)"))
   
   ;; 각의 이등분선 계산 (경계선 내부 방향)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
+  (princ (strcat "\n  이등분선=" (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
   ;; H-Pile 회전 각도 및 삽입점 계산
   ;; 블록 기준점 = 아래 플랜지 중심
@@ -1671,13 +1679,14 @@
       ;; 볼록 모서리: 회전 = 이등분선 - 90도
       (setq insert-point vertex)
       (setq hpile-rotation (- bisector-angle (/ pi 2.0)))
+      (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (이등분선-90)"))
     )
     (progn
       ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 이등분선 + 90도
       (setq offset-dir (+ bisector-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
       (setq hpile-rotation (+ bisector-angle (/ pi 2.0)))
-      (debug-log (strcat "오목 모서리: B/2 오프셋=" (rtos half-b 2 2) "mm"))
+      (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
     )
   )
   
