@@ -1793,10 +1793,10 @@
       (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
     )
     (progn
-      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 - 90도 (반대 방향)
+      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 + 90도 (볼록과 동일)
       (setq offset-dir (+ wale-corner-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
-      (setq hpile-rotation (- wale-corner-angle (/ pi 2.0)))
+      (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
     )
   )
   
@@ -1811,7 +1811,7 @@
   ;; 로그 출력
   (if is-convex
     (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향+90)"))
-    (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
+    (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향+90)"))
   )
   
   ;; (시각화 제거됨)
