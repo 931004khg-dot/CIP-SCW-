@@ -1735,7 +1735,8 @@
 
 ;; 모서리(꼭지점)에 H-Pile 배치 (블록 기준점 사용 - 아래 플랜지 중심)
 ;; timber-offset: 토류판 오프셋 거리 (띠장까지의 거리)
-(defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block timber-offset / 
+;; boundary-orient: 경계선 방향 (1=CCW, -1=CW)
+(defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block timber-offset boundary-orient prev-vertex next-vertex / 
   interior-angle exterior-angle bisector-angle wale-corner-angle is-convex half-h half-b 
   hpile-rotation insert-point offset-dir bisector-end wale-corner prev-dir next-dir
   prev-wale-pt next-wale-pt wale-dir-angle)
@@ -1748,31 +1749,27 @@
   (princ (strcat "\n[모서리] 꼭지점: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ")"))
   (princ (strcat "\n  angle1=" (rtos (* angle1 (/ 180.0 pi)) 2 1) "도, angle2=" (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
-  ;; 내각 계산
+  ;; ★★★ 벡터 외적으로 볼록/오목 판단 ★★★
+  (setq is-convex (is-corner-convex prev-vertex vertex next-vertex boundary-orient))
+  (princ (if is-convex "\n  타입: 볼록(Convex)" "\n  타입: 오목(Concave)"))
+  
+  ;; 각의 이등분선 계산 (참고용)
   (setq exterior-angle (- angle2 angle1))
   (if (< exterior-angle 0)
     (setq exterior-angle (+ exterior-angle (* 2 pi)))
   )
   (setq interior-angle (- (* 2 pi) exterior-angle))
-  
-  (princ (strcat "\n  외각=" (rtos (* exterior-angle (/ 180.0 pi)) 2 1) "도, 내각=" (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
-  
-  ;; 볼록/오목 판단 (내각 < 180도 → 볼록)
-  (setq is-convex (< interior-angle pi))
-  (princ (if is-convex "\n  타입: 볼록(Convex)" "\n  타입: 오목(Concave)"))
-  
-  ;; 각의 이등분선 계산 (기하학적 이등분선)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
   (princ (strcat "\n  기하학 이등분선=" (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; ★★★ 띠장 모서리 방향 계산 ★★★
+  ;; ★★★ 띠장 모서리 방향 계산 (경계선 방향 고려) ★★★
   ;; 띠장 = 경계선에서 수직으로 timber-offset만큼 떨어진 선
-  ;; 이전 선분의 수직 방향 (바깥쪽)
-  (setq prev-dir (+ angle1 (/ pi 2.0)))
+  ;; CCW: 진행방향의 왼쪽(+90°)이 바깥쪽
+  ;; CW: 진행방향의 오른쪽(-90°)이 바깥쪽
+  (setq prev-dir (+ angle1 (* boundary-orient (/ pi 2.0))))
   (setq prev-wale-pt (polar vertex prev-dir timber-offset))
   
-  ;; 다음 선분의 수직 방향 (바깥쪽)
-  (setq next-dir (+ angle2 (/ pi 2.0)))
+  (setq next-dir (+ angle2 (* boundary-orient (/ pi 2.0))))
   (setq next-wale-pt (polar vertex next-dir timber-offset))
   
   ;; 띠장 모서리 = 두 오프셋 점의 중점 (근사값)
@@ -1846,9 +1843,27 @@
   last-before first-new current-ent ent-data delete-count
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
   dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
-  boundary-copy last-before-boundary first-new-boundary boundary-lines)
+  boundary-copy last-before-boundary first-new-boundary boundary-lines
+  boundary-orient offset-sign)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
+  
+  ;; ===== 경계선 방향 판단 (CCW/CW) =====
+  (princ "\n\n[0단계] 경계선 방향 판단...")
+  (setq vertices (extract-vertices boundary-ent))
+  (setq boundary-orient (get-polygon-orientation vertices))
+  
+  ;; boundary-orient: 1 = CCW (반시계), -1 = CW (시계)
+  ;; AutoCAD의 양수 오프셋은 진행방향의 왼쪽
+  ;; CCW: 왼쪽 = 바깥쪽 → 양수 오프셋
+  ;; CW: 왼쪽 = 안쪽 → 음수 오프셋 (바깥쪽으로 가려면)
+  (setq offset-sign boundary-orient)
+  
+  (if (= boundary-orient 1)
+    (princ "\n→ CCW: 양수 오프셋 = 바깥쪽")
+    (princ "\n→ CW: 음수 오프셋 = 바깥쪽")
+  )
+  (debug-log (strcat "오프셋 부호: " (if (= offset-sign 1) "+" "-")))
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -1895,14 +1910,19 @@
   (setq original-area (vla-get-area boundary-vla))
   (debug-log (strcat "원본 면적: " (rtos original-area 2 2)))
   
-  ;; 오프셋 시도 (양수 = 바깥쪽)
-  (setq offset-vla (vl-catch-all-apply 'vla-offset (list boundary-vla timber-offset)))
+  ;; 경계선 방향에 따라 확정된 오프셋 부호 사용
+  ;; CCW (offset-sign=1): +timber-offset = 바깥쪽
+  ;; CW (offset-sign=-1): -timber-offset = 바깥쪽
+  (setq offset-vla (vl-catch-all-apply 'vla-offset 
+    (list boundary-vla (* timber-offset offset-sign))))
   
-  ;; 오류 처리
+  ;; 오류 처리 (복잡한 다각형에서 자기 교차 발생 시)
   (if (vl-catch-all-error-p offset-vla)
     (progn
-      (princ "\n[Warning] 양수 오프셋 실패, 음수로 재시도...")
-      (setq offset-vla (vla-offset boundary-vla (- timber-offset)))
+      (princ "\n[Error] 오프셋 생성 실패 (자기 교차 가능성)")
+      (debug-log "ERROR: 오프셋 생성 실패")
+      (princ "\n작업 중단.")
+      (exit)
     )
   )
   
@@ -1918,29 +1938,19 @@
   )
   
   (setq offset-obj (vlax-vla-object->ename offset-vla))
-  
-  ;; 오프셋 방향 확인 (면적으로 판단)
   (setq offset-area (vla-get-area offset-vla))
+  
+  ;; 오프셋 결과 검증
+  (princ (strcat "\n오프셋 후 면적: " (rtos offset-area 2 2)))
   (debug-log (strcat "오프셋 면적: " (rtos offset-area 2 2)))
   
-  ;; 면적이 작아졌으면 안쪽으로 간 것 → 다시 반대로
-  (if (< offset-area original-area)
+  ;; 면적 검증 (바깥쪽 오프셋은 면적이 커야 함)
+  (if (<= offset-area original-area)
     (progn
-      (princ "\n[Warning] 안쪽 오프셋 생성됨, 반대 방향으로 재시도...")
-      (debug-log "WARNING: 안쪽 오프셋, 반대 방향 재시도")
-      (vla-delete offset-vla)
-      (setq offset-vla (vla-offset boundary-vla (- timber-offset)))
-      (if (= (type offset-vla) 'variant)
-        (setq offset-vla (vlax-variant-value offset-vla))
-      )
-      (if (= (type offset-vla) 'safearray)
-        (setq offset-vla (vlax-safearray->list offset-vla))
-      )
-      (if (= (type offset-vla) 'list)
-        (setq offset-vla (car offset-vla))
-      )
-      (setq offset-obj (vlax-vla-object->ename offset-vla))
+      (princ "\n[Warning] 오프셋이 안쪽으로 생성됨 - 방향 판단 오류 가능성")
+      (debug-log "WARNING: 오프셋 면적이 작아짐")
     )
+    (princ "\n✓ 바깥쪽 오프셋 확인")
   )
   
   (princ (strcat "\n오프셋 객체 생성 완료: " (vl-princ-to-string offset-obj)))
@@ -2196,8 +2206,8 @@
     (setq angle1 (angle prev-vertex curr-vertex))
     (setq angle2 (angle curr-vertex next-vertex))
     
-    ;; H-Pile 배치 (timber-offset 전달)
-    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset)
+    ;; H-Pile 배치 (boundary-orient, prev-vertex, next-vertex 전달)
+    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset boundary-orient prev-vertex next-vertex)
     
     (setq i (+ i 1))
   )
