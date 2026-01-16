@@ -2,9 +2,9 @@
 ;; Test file: test-boundary-detection.lsp
 ;; Purpose: Verify is-closed-polyline detection and boundary orientation
 ;; Created: 2026-01-16
-;; Version: 1.0.0
+;; Version: 1.1.0
 
-(defun c:test-boundary ( / test-ent ent-data closed-flag vertices orientation)
+(defun c:test-boundary ( / test-ent ent-data closed-flag vertices orientation centroid)
   (princ "\n테스트: 경계선 선택...")
   (setq test-ent (car (entsel "\n경계선 폴리라인 선택: ")))
   
@@ -43,6 +43,25 @@
         (progn
           (setq orientation (get-polygon-orientation vertices))
           (princ (strcat "\n다각형 방향: " (if (= orientation 1) "CCW (반시계)" "CW (시계)")))
+          
+          ;; 6. 중심점 계산 및 내부 확인
+          (setq centroid (get-polygon-centroid vertices))
+          (princ (strcat "\n중심점: (" 
+                         (rtos (car centroid) 2 2) ", " 
+                         (rtos (cadr centroid) 2 2) ")"))
+          
+          (if (point-inside-polygon centroid vertices)
+            (princ "\n중심점 위치: 다각형 내부 ✓")
+            (princ "\n중심점 위치: 다각형 외부 ✗")
+          )
+          
+          ;; 7. 폐합선인 경우 노란색 원 생성
+          (if (is-closed-polyline test-ent)
+            (progn
+              (princ "\n\n[시각화] 노란색 원 생성 중...")
+              (create-interior-circle test-ent vertices)
+            )
+          )
         )
         (princ "\n방향 판단 불가: 꼭지점 부족")
       )
@@ -131,6 +150,97 @@
   (if (> signed-area 0)
     1    ; CCW
     -1   ; CW
+  )
+)
+
+;; 다각형의 중심점(Centroid) 계산
+(defun get-polygon-centroid (vertices / n i pt sum-x sum-y cx cy)
+  (setq n (length vertices))
+  (setq sum-x 0.0)
+  (setq sum-y 0.0)
+  
+  (setq i 0)
+  (while (< i n)
+    (setq pt (nth i vertices))
+    (setq sum-x (+ sum-x (car pt)))
+    (setq sum-y (+ sum-y (cadr pt)))
+    (setq i (+ i 1))
+  )
+  
+  (setq cx (/ sum-x n))
+  (setq cy (/ sum-y n))
+  
+  (list cx cy)
+)
+
+;; 점이 다각형 내부에 있는지 확인 (Ray Casting Algorithm)
+(defun point-inside-polygon (pt vertices / n i j inside x y xi yi xj yj intersect)
+  (setq n (length vertices))
+  (setq inside nil)
+  (setq x (car pt))
+  (setq y (cadr pt))
+  
+  (setq i 0)
+  (setq j (- n 1))
+  
+  (while (< i n)
+    (setq xi (car (nth i vertices)))
+    (setq yi (cadr (nth i vertices)))
+    (setq xj (car (nth j vertices)))
+    (setq yj (cadr (nth j vertices)))
+    
+    ;; Ray casting: 점에서 오른쪽으로 수평선을 그었을 때 교차 여부
+    (setq intersect 
+      (and 
+        (or (and (> yi y) (<= yj y))
+            (and (> yj y) (<= yi y)))
+        (< x (+ (* (/ (- xj xi) (- yj yi)) (- y yi)) xi))
+      )
+    )
+    
+    (if intersect
+      (setq inside (not inside))
+    )
+    
+    (setq j i)
+    (setq i (+ i 1))
+  )
+  
+  inside
+)
+
+;; 폐합 경계선 내부에 노란색 원 생성 (시각화)
+(defun create-interior-circle (boundary-ent vertices / centroid circle-ent)
+  (setq centroid (get-polygon-centroid vertices))
+  
+  (princ (strcat "\n[시각화] 경계선 중심점: (" 
+                 (rtos (car centroid) 2 2) ", " 
+                 (rtos (cadr centroid) 2 2) ")"))
+  
+  ;; 중심점이 내부에 있는지 확인
+  (if (point-inside-polygon centroid vertices)
+    (progn
+      (princ "\n[시각화] 중심점이 내부에 있음 - 노란색 원 생성")
+      
+      ;; 노란색 원 생성 (D=2000, R=1000)
+      (entmake
+        (list
+          '(0 . "CIRCLE")
+          '(8 . "0")              ; 레이어 0
+          (cons 62 2)             ; 색상: 노란색(2)
+          (cons 10 centroid)      ; 중심점
+          '(40 . 1000.0)          ; 반지름 1000mm (D=2000)
+        )
+      )
+      
+      (setq circle-ent (entlast))
+      (princ "\n노란색 원 생성 완료!")
+      circle-ent
+    )
+    (progn
+      (princ "\n[경고] 중심점이 외부에 있음 - 원 생성 실패")
+      nil
+    )
   )
 )
 

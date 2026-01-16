@@ -209,6 +209,101 @@
   )
 )
 
+;; 다각형의 중심점(Centroid) 계산
+;; 반환값: (x y) 리스트
+(defun get-polygon-centroid (vertices / n i pt sum-x sum-y cx cy)
+  (setq n (length vertices))
+  (setq sum-x 0.0)
+  (setq sum-y 0.0)
+  
+  (setq i 0)
+  (while (< i n)
+    (setq pt (nth i vertices))
+    (setq sum-x (+ sum-x (car pt)))
+    (setq sum-y (+ sum-y (cadr pt)))
+    (setq i (+ i 1))
+  )
+  
+  (setq cx (/ sum-x n))
+  (setq cy (/ sum-y n))
+  
+  (list cx cy)
+)
+
+;; 점이 다각형 내부에 있는지 확인 (Ray Casting Algorithm)
+;; 반환값: T = 내부, nil = 외부
+(defun point-inside-polygon (pt vertices / n i j inside x y xi yi xj yj intersect)
+  (setq n (length vertices))
+  (setq inside nil)
+  (setq x (car pt))
+  (setq y (cadr pt))
+  
+  (setq i 0)
+  (setq j (- n 1))
+  
+  (while (< i n)
+    (setq xi (car (nth i vertices)))
+    (setq yi (cadr (nth i vertices)))
+    (setq xj (car (nth j vertices)))
+    (setq yj (cadr (nth j vertices)))
+    
+    ;; Ray casting: 점에서 오른쪽으로 수평선을 그었을 때 교차 여부
+    (setq intersect 
+      (and 
+        (or (and (> yi y) (<= yj y))
+            (and (> yj y) (<= yi y)))
+        (< x (+ (* (/ (- xj xi) (- yj yi)) (- y yi)) xi))
+      )
+    )
+    
+    (if intersect
+      (setq inside (not inside))
+    )
+    
+    (setq j i)
+    (setq i (+ i 1))
+  )
+  
+  inside
+)
+
+;; 폐합 경계선 내부에 노란색 원 생성 (시각화)
+;; 반환값: 원 엔티티 또는 nil
+(defun create-interior-circle (boundary-ent vertices / centroid circle-ent)
+  (setq centroid (get-polygon-centroid vertices))
+  
+  (princ (strcat "\n[시각화] 경계선 중심점: (" 
+                 (rtos (car centroid) 2 2) ", " 
+                 (rtos (cadr centroid) 2 2) ")"))
+  
+  ;; 중심점이 내부에 있는지 확인
+  (if (point-inside-polygon centroid vertices)
+    (progn
+      (princ "\n[시각화] 중심점이 내부에 있음 - 노란색 원 생성")
+      
+      ;; 노란색 원 생성 (D=2000, R=1000)
+      (entmake
+        (list
+          '(0 . "CIRCLE")
+          '(8 . "0")              ; 레이어 0
+          (cons 62 2)             ; 색상: 노란색(2)
+          (cons 10 centroid)      ; 중심점
+          '(40 . 1000.0)          ; 반지름 1000mm (D=2000)
+        )
+      )
+      
+      (setq circle-ent (entlast))
+      (debug-log (strcat "노란색 원 생성 완료 (중심: " (vl-princ-to-string centroid) ")"))
+      circle-ent
+    )
+    (progn
+      (princ "\n[경고] 중심점이 외부에 있음 - 원 생성 실패")
+      (debug-log "경고: 중심점이 다각형 외부에 위치")
+      nil
+    )
+  )
+)
+
 ;;; ----------------------------------------------------------------------
 ;;; 기존 함수 재정의 (디버깅 기능 추가)
 ;;; ----------------------------------------------------------------------
@@ -1896,6 +1991,10 @@
         (princ "\n- CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
       )
       (debug-log (strcat "폐합선 - 자동 방향: " (if (= boundary-orient 1) "CCW" "CW")))
+      
+      ;; 폐합선 내부에 노란색 원 생성 (시각화)
+      (princ "\n- 경계선 내부 시각화 중...")
+      (create-interior-circle boundary-ent vertices)
     )
     
     ;; 열린선: 사용자에게 클릭 요청
