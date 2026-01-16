@@ -1676,8 +1676,13 @@
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
   (debug-log (strcat "이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; H-Pile 회전 각도 = 이등분선 각도 (플랜지 밑면이 이등분선 방향을 향함)
-  (setq hpile-rotation bisector-angle)
+  ;; H-Pile 회전 각도 계산
+  ;; 블록 기준점 = 아래 플랜지 중심
+  ;; H-Pile 중심 → 아래 플랜지 중심 = 웹 방향 (세로 축)
+  ;; 이 방향이 경계선 안쪽(이등분선 방향)을 향해야 함
+  ;; 따라서: 회전 = 이등분선 각도 - 90도
+  (setq hpile-rotation (- bisector-angle (/ pi 2.0)))
+  (debug-log (strcat "H-Pile 회전 각도 (이등분선 - 90도): " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
   
   ;; 삽입점 계산 (블록 기준점 = 아래 플랜지 중심)
   (if is-convex
@@ -1961,6 +1966,98 @@
   
   (princ "\n\n토류판 배치 완료!")
   (debug-log "=== 3단계 완료 ===")
+  
+  ;; ===== 3.5단계: 직선 구간에 H-Pile 배치 (토류판 사이 중앙) =====
+  (princ "\n\n[3.5단계] 직선 구간에 H-Pile 배치 (토류판 사이 중앙)...")
+  (debug-log "=== 3.5단계: 직선 구간 H-Pile 배치 시작 ===")
+  
+  (foreach line-ent exploded-lines
+    (setq line-data (entget line-ent))
+    (setq pt1 (cdr (assoc 10 line-data)))
+    (setq pt2 (cdr (assoc 11 line-data)))
+    
+    ;; 선분 길이와 각도 계산
+    (setq seg-length (distance pt1 pt2))
+    (setq seg-angle (angle pt1 pt2))
+    
+    ;; 중점 계산
+    (setq mid-pt (list
+      (/ (+ (car pt1) (car pt2)) 2.0)
+      (/ (+ (cadr pt1) (cadr pt2)) 2.0)
+      0.0
+    ))
+    
+    ;; C.T.C 간격
+    (setq ctc-mm (* ctc 1000.0))
+    
+    ;; 중점에서 양쪽으로 몇 개씩
+    (setq half-length (/ seg-length 2.0))
+    (setq num-left (fix (/ half-length ctc-mm)))
+    (setq num-right (fix (/ half-length ctc-mm)))
+    
+    ;; H-Pile 배치 위치 리스트 생성 (토류판 사이 = C.T.C/2 오프셋)
+    (setq hpile-positions '())
+    
+    ;; 왼쪽 방향 (음수)
+    (setq i num-left)
+    (while (>= i 1)
+      (setq dist (+ (* i ctc-mm -1.0) (/ ctc-mm 2.0)))  ; C.T.C/2 만큼 오른쪽으로
+      (setq new-pt (polar mid-pt seg-angle dist))
+      
+      ;; 범위 체크
+      (setq dist-from-pt1 (distance pt1 new-pt))
+      (setq dist-from-pt2 (distance pt2 new-pt))
+      
+      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
+        (setq hpile-positions (append hpile-positions (list new-pt)))
+      )
+      
+      (setq i (1- i))
+    )
+    
+    ;; 오른쪽 방향 (양수)
+    (setq i 0)
+    (while (< i num-right)
+      (setq dist (+ (* i ctc-mm) (/ ctc-mm 2.0)))  ; C.T.C/2 만큼 오른쪽으로
+      (setq new-pt (polar mid-pt seg-angle dist))
+      
+      ;; 범위 체크
+      (setq dist-from-pt1 (distance pt1 new-pt))
+      (setq dist-from-pt2 (distance pt2 new-pt))
+      
+      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
+        (setq hpile-positions (append hpile-positions (list new-pt)))
+      )
+      
+      (setq i (1+ i))
+    )
+    
+    (princ (strcat "\n  직선 구간 H-Pile 개수: " (itoa (length hpile-positions))))
+    (debug-log (strcat "직선 구간 H-Pile 개수: " (itoa (length hpile-positions))))
+    
+    ;; 각 위치에 H-Pile INSERT
+    ;; 회전 각도 = 선분 각도 - 90도 (웹이 경계선 안쪽을 향하도록)
+    (setq hpile-rotation (- seg-angle (/ pi 2.0)))
+    
+    (foreach hpile-pt hpile-positions
+      (entmake
+        (list
+          '(0 . "INSERT")
+          (cons 2 hpile-block)
+          '(8 . "_측면말뚝")
+          (cons 10 hpile-pt)
+          '(41 . 1.0)
+          '(42 . 1.0)
+          '(43 . 1.0)
+          (cons 50 hpile-rotation)
+        )
+      )
+      (debug-log (strcat "직선 H-Pile 배치: (" (rtos (car hpile-pt) 2 2) ", " (rtos (cadr hpile-pt) 2 2) ")"))
+    )
+  )
+  
+  (princ "\n직선 구간 H-Pile 배치 완료!")
+  (debug-log "=== 3.5단계 완료 ===")
   
   ;; ===== 4단계: 모서리(꼭지점)에 H-Pile 배치 =====
   (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
