@@ -2149,8 +2149,14 @@
     )
     
     ;; 각 위치에 H-Pile INSERT
-    (setq hpile-rotation seg-angle)
-    (setq boundary-direction (- seg-angle (/ pi 2.0)))
+    ;; 웹이 경계선 바깥쪽을 향하도록 회전
+    ;; CCW: seg-angle - 90° (진행방향 오른쪽 = 내부, 왼쪽 = 외부)
+    ;; CW: seg-angle + 90° (진행방향 왼쪽 = 내부, 오른쪽 = 외부)
+    (setq hpile-rotation (- seg-angle (* boundary-orient (/ pi 2.0))))
+    
+    ;; 경계선 방향 (내부를 향함)
+    (setq boundary-direction (* boundary-orient (/ pi 2.0)))
+    (setq boundary-direction (+ seg-angle boundary-direction))
     
     (foreach hpile-pt hpile-positions
       ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
