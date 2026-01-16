@@ -2395,11 +2395,18 @@
     ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90도)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
+    ;; 디버그: 각도 정보 출력
+    (princ (strcat "\n  [디버그] 세그먼트 " (itoa seg-idx) ":"))
+    (princ (strcat "\n    선분 각도(seg-angle): " (rtos (* seg-angle (/ 180.0 pi)) 2 1) "°"))
+    (princ (strcat "\n    boundary-orient: " (itoa boundary-orient)))
+    (princ (strcat "\n    외부 법선(outward-normal): " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
+    
     ;; H-Pile 회전 = 외부 법선 방향 + 90도 (블록이 기본적으로 90도 서있음)
     ;; H-Pile 블록은 기본적으로 웹이 Y축(90도, North)을 향함
     ;; outward-normal + 90도로 회전시켜야 상부 플랜지가 바깥을 향함
     ;; (이전에 -90도를 했더니 안쪽을 향해서 180도 차이 보정)
     (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
+    (princ (strcat "\n    H-Pile 회전각: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "°"))
     
     (foreach hpile-pt hpile-positions
       ;; hpile-pt는 원본 경계선 위의 점
