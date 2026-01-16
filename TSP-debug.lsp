@@ -2313,12 +2313,23 @@
   
   (debug-log (strcat "원본 경계선 꼭지점 개수: " (itoa (length orig-vertices))))
   
+  ;; 폐합 여부 확인
+  (setq is-closed (is-closed-polyline boundary-ent))
+  (debug-log (strcat "경계선 타입: " (if is-closed "폐합(Closed)" "열림(Open)")))
+  
   ;; 각 세그먼트별로 H-Pile 배치
   (setq seg-idx 0)
   (setq n-verts (length orig-vertices))
-  (while (< seg-idx n-verts)
+  ;; 열린 선: n-1개 세그먼트만, 닫힌 선: n개 세그먼트
+  (setq max-segments (if is-closed n-verts (- n-verts 1)))
+  (debug-log (strcat "처리할 세그먼트 개수: " (itoa max-segments)))
+  
+  (while (< seg-idx max-segments)
     (setq pt1 (nth seg-idx orig-vertices))
-    (setq pt2 (nth (rem (+ seg-idx 1) n-verts) orig-vertices))
+    (if is-closed
+      (setq pt2 (nth (rem (+ seg-idx 1) n-verts) orig-vertices))
+      (setq pt2 (nth (+ seg-idx 1) orig-vertices))
+    )
     
     ;; 선분 길이와 각도 계산 (원본 경계선 기준)
     (setq seg-length (distance pt1 pt2))
@@ -2434,21 +2445,36 @@
   )
   
   (princ (strcat "\n  경계선 꼭지점 개수: " (itoa (length vertices))))
+  (princ (strcat "\n  경계선 타입: " (if is-closed "폐합" "열림")))
   
   ;; 각 꼭지점에 H-Pile 배치 (이전/현재/다음 꼭지점 사용)
   (setq i 0)
   (setq num-vertices (length vertices))
   (while (< i num-vertices)
-    (setq prev-vertex (nth (if (= i 0) (- num-vertices 1) (- i 1)) vertices))
-    (setq curr-vertex (nth i vertices))
-    (setq next-vertex (nth (if (= i (- num-vertices 1)) 0 (+ i 1)) vertices))
-    
-    ;; 각도 계산
-    (setq angle1 (angle prev-vertex curr-vertex))
-    (setq angle2 (angle curr-vertex next-vertex))
-    
-    ;; H-Pile 배치 (boundary-orient, prev-vertex, next-vertex 전달)
-    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset boundary-orient prev-vertex next-vertex)
+    ;; 열린 선: 첫 점과 마지막 점은 모서리가 아니므로 스킵
+    (if (or is-closed
+            (and (> i 0) (< i (- num-vertices 1))))
+      (progn
+        (if is-closed
+          (progn
+            (setq prev-vertex (nth (if (= i 0) (- num-vertices 1) (- i 1)) vertices))
+            (setq next-vertex (nth (if (= i (- num-vertices 1)) 0 (+ i 1)) vertices))
+          )
+          (progn
+            (setq prev-vertex (nth (- i 1) vertices))
+            (setq next-vertex (nth (+ i 1) vertices))
+          )
+        )
+        (setq curr-vertex (nth i vertices))
+        
+        ;; 각도 계산
+        (setq angle1 (angle prev-vertex curr-vertex))
+        (setq angle2 (angle curr-vertex next-vertex))
+        
+        ;; H-Pile 배치 (boundary-orient, prev-vertex, next-vertex 전달)
+        (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset boundary-orient prev-vertex next-vertex)
+      )
+    )
     
     (setq i (+ i 1))
   )
