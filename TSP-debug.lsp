@@ -1508,12 +1508,12 @@
       (setq hpile-ent (create-hpile-section '(0 0) h b tw tf layer-name))
       (debug-log "H-Pile 단면 생성 완료")
       
-      ;; 위 플랜지 중심 계산 (바로 서있는 H-Pile)
-      ;; H-Pile 중심이 (0,0)이고, 위 플랜지 중심 = (0, half-h)
+      ;; 아래 플랜지 중심 계산 (바로 서있는 H-Pile)
+      ;; H-Pile 중심이 (0,0)이고, 아래 플랜지 중심 = (0, -half-h)
       (setq half-h (/ h 2.0))
-      (setq flange-center (list 0.0 half-h 0.0))
+      (setq flange-center (list 0.0 (- half-h) 0.0))
       
-      ;; POINT 생성 (위 플랜지 중심)
+      ;; POINT 생성 (아래 플랜지 중심)
       (entmake
         (list
           '(0 . "POINT")
@@ -1522,12 +1522,12 @@
         )
       )
       (setq point-ent (entlast))
-      (debug-log (strcat "위 플랜지 중심 POINT 생성: (0, " (rtos half-h 2 2) ")"))
+      (debug-log (strcat "아래 플랜지 중심 POINT 생성: (0, " (rtos (- half-h) 2 2) ")"))
       
-      ;; 블록 생성 (기준점 = 위 플랜지 중심)
+      ;; 블록 생성 (기준점 = 아래 플랜지 중심)
       (command "._-BLOCK"
         block-name      ; 블록명
-        flange-center   ; 기준점 = 위 플랜지 중심 POINT
+        flange-center   ; 기준점 = 아래 플랜지 중심 POINT
         hpile-ent       ; H-Pile 단면
         point-ent       ; POINT
         ""
@@ -1641,53 +1641,72 @@
   timber-pline
 )
 
-;; 모서리(꼭지점)에 H-Pile 배치 (간단한 버전 - 블록 기준점 사용)
+;; 모서리(꼭지점)에 H-Pile 배치 (블록 기준점 사용 - 아래 플랜지 중심)
 (defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block / 
-  interior-angle bisector-angle is-convex half-h half-b hpile-rotation)
+  interior-angle exterior-angle bisector-angle is-convex half-h half-b 
+  hpile-rotation insert-point offset-dir)
   
   (debug-log (strcat "=== 모서리 H-Pile 배치: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ") ==="))
   
-  (debug-log (strcat "각도1: " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
-  (debug-log (strcat "각도2: " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
+  (debug-log (strcat "각도1 (prev→curr): " (rtos (* angle1 (/ 180.0 pi)) 2 1) "도"))
+  (debug-log (strcat "각도2 (curr→next): " (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
-  ;; 내각 계산 (올바른 방법)
-  ;; angle1 = 이전 선분의 방향 (prev → curr)
-  ;; angle2 = 다음 선분의 방향 (curr → next)
+  ;; H-Pile 크기
+  (setq half-h (/ h 2.0))  ; 149 mm
+  (setq half-b (/ b 2.0))  ; 100.5 mm
+  
+  ;; 내각 계산
+  ;; angle1 = 이전 선분 방향 (prev → curr)
+  ;; angle2 = 다음 선분 방향 (curr → next)
   ;; 외각 = angle2 - angle1 (CCW 회전량)
-  ;; 내각 = 2π - 외각
   (setq exterior-angle (- angle2 angle1))
   (if (< exterior-angle 0)
     (setq exterior-angle (+ exterior-angle (* 2 pi)))
   )
   (setq interior-angle (- (* 2 pi) exterior-angle))
   
+  (debug-log (strcat "외각: " (rtos (* exterior-angle (/ 180.0 pi)) 2 1) "도"))
   (debug-log (strcat "내각: " (rtos (* interior-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; 볼록/오목 판단
+  ;; 볼록/오목 판단 (내각 < 180도 → 볼록)
   (setq is-convex (< interior-angle pi))
-  (debug-log (if is-convex "볼록 꼭지점" "오목 꼭지점"))
+  (debug-log (if is-convex "✓ 볼록(Convex) 꼭지점" "✓ 오목(Concave) 꼭지점"))
   
-  ;; 각의 이등분선 계산
+  ;; 각의 이등분선 계산 (경계선 내부 방향)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
   (debug-log (strcat "이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; H-Pile 크기
-  (setq half-h (/ h 2.0))  ; 149 mm
-  (setq half-b (/ b 2.0))  ; 100.5 mm
-  
-  ;; 회전 각도 계산
+  ;; H-Pile 회전 각도 = 이등분선 각도 (플랜지 밑면이 이등분선 방향을 향함)
   (setq hpile-rotation bisector-angle)
   
-  (debug-log (strcat "블록 삽입점 (경계선 꼭지점): (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ")"))
+  ;; 삽입점 계산 (블록 기준점 = 아래 플랜지 중심)
+  (if is-convex
+    (progn
+      ;; 볼록 모서리: 플랜지 밑면 중앙이 모서리(vertex)와 일치
+      ;; 블록 기준점이 아래 플랜지 중심이므로, vertex가 바로 삽입점
+      (setq insert-point vertex)
+      (debug-log "볼록: 플랜지 밑면 중앙 = 모서리")
+    )
+    (progn
+      ;; 오목 모서리: 
+      ;; 1) 먼저 vertex에 배치 (플랜지 밑면 중앙 = vertex)
+      ;; 2) 경계선 바깥쪽(이등분선 반대 방향)으로 B/2 오프셋
+      (setq offset-dir (+ bisector-angle pi))  ; 이등분선 반대 방향
+      (setq insert-point (polar vertex offset-dir half-b))
+      (debug-log (strcat "오목: B/2 오프셋 = " (rtos half-b 2 2) "mm, 방향 = " (rtos (* offset-dir (/ 180.0 pi)) 2 1) "도"))
+    )
+  )
+  
+  (debug-log (strcat "삽입점: (" (rtos (car insert-point) 2 2) ", " (rtos (cadr insert-point) 2 2) ")"))
   (debug-log (strcat "회전 각도: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
   
-  ;; H-Pile 블록 INSERT (기준점이 아래 플랜지 중심이므로 vertex에 바로 삽입)
+  ;; H-Pile 블록 INSERT
   (entmake
     (list
       '(0 . "INSERT")
       (cons 2 hpile-block)
       '(8 . "_측면말뚝")
-      (cons 10 vertex)  ; 삽입점 = 경계선 꼭지점 (블록 기준점이 아래 플랜지 중심)
+      (cons 10 insert-point)
       '(41 . 1.0)
       '(42 . 1.0)
       '(43 . 1.0)
@@ -1695,7 +1714,7 @@
     )
   )
   
-  (debug-log "H-Pile 배치 완료 (블록 기준점 = 위 플랜지 중심)")
+  (debug-log "✓ H-Pile 배치 완료")
 )
 
 ;;; ----------------------------------------------------------------------
