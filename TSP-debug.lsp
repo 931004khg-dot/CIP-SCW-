@@ -1670,7 +1670,7 @@
   
   ;; 볼록/오목 판단 (내각 < 180도 → 볼록)
   (setq is-convex (< interior-angle pi))
-  (debug-log (if is-convex "✓ 볼록(Convex) 꼭지점" "✓ 오목(Concave) 꼭지점"))
+  (debug-log (if is-convex "[OK] 볼록(Convex) 꼭지점" "[OK] 오목(Concave) 꼭지점"))
   
   ;; 각의 이등분선 계산 (경계선 내부 방향)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
@@ -1714,7 +1714,7 @@
     )
   )
   
-  (debug-log "✓ H-Pile 배치 완료")
+  (debug-log "[OK] H-Pile 배치 완료")
 )
 
 ;;; ----------------------------------------------------------------------
