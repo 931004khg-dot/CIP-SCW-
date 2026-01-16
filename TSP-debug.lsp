@@ -2047,10 +2047,8 @@
     )
     
     ;; 각 위치에 H-Pile INSERT
-    ;; 웹이 경계선 안쪽을 향하도록: 회전 = seg-angle - 90°
-    (setq hpile-rotation (- seg-angle (/ pi 2.0)))
-    ;; 플랜지가 경계선 바깥쪽을 향하도록: 오프셋 방향 = seg-angle + 90°
-    (setq boundary-direction (+ seg-angle (/ pi 2.0)))
+    (setq hpile-rotation seg-angle)
+    (setq boundary-direction (- seg-angle (/ pi 2.0)))
     
     (foreach hpile-pt hpile-positions
       ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
