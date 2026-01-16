@@ -2368,11 +2368,14 @@
     ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90도)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; H-Pile 회전 = 경계선 방향 (웹이 수직을 유지하도록)
-    (setq hpile-rotation seg-angle)
+    ;; H-Pile 회전 = 외부 법선 방향 (웹이 바깥을 향하도록)
+    ;; H-Pile 블록은 기본적으로 웹이 Y축(위)을 향하므로
+    ;; outward-normal 방향으로 회전시키면 웹이 바깥을 향함
+    (setq hpile-rotation outward-normal)
     
     (foreach hpile-pt hpile-positions
-      ;; 하부 플랜지가 원본 경계선에 닿도록 tf만큼만 바깥으로 오프셋
+      ;; hpile-pt는 원본 경계선 위의 점
+      ;; 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
       (setq insert-pt (polar hpile-pt outward-normal tf))
       
       (entmake
