@@ -2042,10 +2042,10 @@
     
     ;; 아래 플랜지 면이 경계선과 일치하도록 삽입점 조정
     ;; 블록 기준점 = 아래 플랜지 중심 (0, -half-h)
-    ;; 토류판 중앙에서 경계선 방향으로 44mm 이동
+    ;; 토류판 중앙에서 경계선 방향으로 timber-offset 만큼 이동
+    ;; timber-offset = (토류판 두께/2) + tf (이미 Line 1760에서 계산됨)
     ;; 경계선 방향 = 선분 각도 - 90도 (선분에 수직, 경계선 쪽)
     (setq boundary-direction (- seg-angle (/ pi 2.0)))
-    (setq timber-offset 44.0)  ; 토류판 오프셋 (mm)
     
     (foreach hpile-pt hpile-positions
       ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
@@ -2065,7 +2065,8 @@
       )
       (debug-log (strcat "직선 H-Pile 배치: 원래=" (rtos (car hpile-pt) 2 2) "," (rtos (cadr hpile-pt) 2 2) 
                          " → 조정=" (rtos (car adjusted-pt) 2 2) "," (rtos (cadr adjusted-pt) 2 2) 
-                         ", 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
+                         ", 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"
+                         ", 오프셋=" (rtos timber-offset 2 2) "mm"))
     )
   )
   
