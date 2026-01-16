@@ -1702,39 +1702,30 @@
       ;; 볼록 모서리: 회전 = 띠장방향 - 90도
       (setq insert-point vertex)
       (setq hpile-rotation (- wale-corner-angle (/ pi 2.0)))
-      (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
     )
     (progn
       ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 + 90도
       (setq offset-dir (+ wale-corner-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
       (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
-      (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
     )
   )
   
-  ;; 기하학적 이등분선 시각화 (빨간색 LINE, 1000mm 길이)
-  (setq bisector-end (polar vertex bisector-angle 1000.0))
-  (entmake
-    (list
-      '(0 . "LINE")
-      '(8 . "_DEBUG")
-      '(62 . 1)  ; 빨간색
-      (cons 10 vertex)
-      (cons 11 bisector-end)
-    )
+  ;; 회전 각도 정규화 (0 ~ 2*pi)
+  (while (< hpile-rotation 0)
+    (setq hpile-rotation (+ hpile-rotation (* 2 pi)))
+  )
+  (while (>= hpile-rotation (* 2 pi))
+    (setq hpile-rotation (- hpile-rotation (* 2 pi)))
   )
   
-  ;; 띠장 모서리 방향 시각화 (초록색 LINE, 1000mm 길이)
-  (entmake
-    (list
-      '(0 . "LINE")
-      '(8 . "_DEBUG")
-      '(62 . 3)  ; 초록색
-      (cons 10 vertex)
-      (cons 11 (polar vertex wale-corner-angle 1000.0))
-    )
+  ;; 로그 출력
+  (if is-convex
+    (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
+    (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
   )
+  
+  ;; (시각화 제거됨)
   
   ;; H-Pile 블록 INSERT
   (entmake
@@ -1799,20 +1790,6 @@
   ;; 토류판 너비 계산
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
   (debug-log (strcat "토류판 너비: " (rtos timber-width 2 2) "mm"))
-  
-  ;; DEBUG 레이어 생성 (이등분선 시각화용)
-  (if (not (tblsearch "LAYER" "_DEBUG"))
-    (entmake
-      (list
-        '(0 . "LAYER")
-        '(100 . "AcDbSymbolTableRecord")
-        '(100 . "AcDbLayerTableRecord")
-        '(2 . "_DEBUG")
-        '(70 . 0)
-        '(62 . 1)  ; 빨간색
-      )
-    )
-  )
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
