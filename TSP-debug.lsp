@@ -149,6 +149,18 @@
   )
 )
 
+;; 폴리라인 폐합 여부 판별
+;; 반환값: T = 폐합선 (Closed), nil = 열린선 (Open)
+(defun is-closed-polyline (ent / ent-data closed-flag)
+  (setq ent-data (entget ent))
+  ;; DXF 코드 70의 bit 0 = closed flag
+  (setq closed-flag (cdr (assoc 70 ent-data)))
+  (if closed-flag
+    (= 1 (logand 1 closed-flag))
+    nil
+  )
+)
+
 ;; 벡터 외적으로 모서리 볼록/오목 판단
 ;; 반환값: T = 볼록 (Convex), nil = 오목 (Concave)
 (defun is-corner-convex (prev-pt curr-pt next-pt orientation / 
@@ -1844,25 +1856,68 @@
   seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
   dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
   boundary-copy last-before-boundary first-new-boundary boundary-lines
-  boundary-orient offset-sign)
+  boundary-orient offset-sign user-pt left-test-pt v1 v2 cross-z
+  outward-normal insert-pt hpile-positions hpile-pt hpile-rotation)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   
-  ;; ===== 경계선 방향 판단 (CCW/CW) =====
-  (princ "\n\n[0단계] 경계선 방향 판단...")
+  ;; ===== 경계선 타입 판별 및 방향 결정 =====
+  (princ "\n\n[0단계] 경계선 타입 및 방향 판단...")
   (setq vertices (extract-vertices boundary-ent))
-  (setq boundary-orient (get-polygon-orientation vertices))
   
-  ;; boundary-orient: 1 = CCW (반시계), -1 = CW (시계)
-  ;; AutoCAD의 양수 오프셋은 진행방향의 왼쪽
-  ;; CCW: 왼쪽 = 바깥쪽 → 양수 오프셋
-  ;; CW: 왼쪽 = 안쪽 → 음수 오프셋 (바깥쪽으로 가려면)
-  (setq offset-sign boundary-orient)
-  
-  (if (= boundary-orient 1)
-    (princ "\n→ CCW: 양수 오프셋 = 바깥쪽")
-    (princ "\n→ CW: 음수 오프셋 = 바깥쪽")
+  (if (is-closed-polyline boundary-ent)
+    ;; 폐합선: 자동으로 방향 계산
+    (progn
+      (princ "\n→ 폐합 다각형 감지")
+      (setq boundary-orient (get-polygon-orientation vertices))
+      (if (= boundary-orient 1)
+        (princ "\n→ CCW(반시계): 외부 방향 자동 계산 (왼쪽 = 바깥)")
+        (princ "\n→ CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
+      )
+      (debug-log (strcat "폐합선 - 자동 방향: " (if (= boundary-orient 1) "CCW" "CW")))
+    )
+    
+    ;; 열린선: 사용자에게 클릭 요청
+    (progn
+      (princ "\n→ 열린 경계선 감지")
+      (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
+      (setq user-pt (getpoint))
+      
+      ;; 첫 번째 선분 기준으로 좌/우 판별
+      (setq pt1 (car vertices))
+      (setq pt2 (cadr vertices))
+      (setq seg-angle (angle pt1 pt2))
+      (setq mid-pt (polar pt1 seg-angle (/ (distance pt1 pt2) 2.0)))
+      
+      ;; 왼쪽 테스트 포인트 (진행방향의 왼쪽)
+      (setq left-test-pt (polar mid-pt (+ seg-angle (/ pi 2.0)) 1000.0))
+      
+      ;; 외적으로 좌/우 판별
+      (setq v1 (list (- (car user-pt) (car mid-pt)) 
+                     (- (cadr user-pt) (cadr mid-pt))))
+      (setq v2 (list (- (car left-test-pt) (car mid-pt)) 
+                     (- (cadr left-test-pt) (cadr mid-pt))))
+      (setq cross-z (- (* (car v1) (cadr v2)) 
+                       (* (cadr v1) (car v2))))
+      
+      (if (> cross-z 0)
+        (progn
+          (setq boundary-orient 1)   ; 왼쪽 클릭 = CCW
+          (princ "\n→ 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
+        )
+        (progn
+          (setq boundary-orient -1)  ; 오른쪽 클릭 = CW
+          (princ "\n→ 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
+        )
+      )
+      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "왼쪽(CCW)" "오른쪽(CW)")))
+    )
   )
+  
+  ;; 오프셋 부호 결정
+  ;; boundary-orient: 1 = CCW (왼쪽=바깥), -1 = CW (오른쪽=바깥)
+  ;; AutoCAD의 양수 오프셋은 진행방향의 왼쪽
+  (setq offset-sign boundary-orient)
   (debug-log (strcat "오프셋 부호: " (if (= offset-sign 1) "+" "-")))
   
   ;; H-Pile 규격 파싱
@@ -2148,26 +2203,23 @@
       (princ (strcat "\n  직선 H-Pile: " (itoa (length hpile-positions)) "개"))
     )
     
-    ;; 각 위치에 H-Pile INSERT
-    ;; 웹이 경계선 바깥쪽을 향하도록 회전
-    ;; CCW: seg-angle - 90° (진행방향 오른쪽 = 내부, 왼쪽 = 외부)
-    ;; CW: seg-angle + 90° (진행방향 왼쪽 = 내부, 오른쪽 = 외부)
-    (setq hpile-rotation (- seg-angle (* boundary-orient (/ pi 2.0))))
+    ;; ✅ 수정: 외부 법선 방향 계산
+    ;; 경계선의 외부 방향 = seg-angle + (boundary-orient × 90°)
+    (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; 경계선 방향 (내부를 향함)
-    (setq boundary-direction (* boundary-orient (/ pi 2.0)))
-    (setq boundary-direction (+ seg-angle boundary-direction))
+    ;; ✅ 수정: 웹이 바깥을 향하도록 회전
+    (setq hpile-rotation outward-normal)
     
     (foreach hpile-pt hpile-positions
-      ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
-      (setq adjusted-pt (polar hpile-pt boundary-direction timber-offset))
+      ;; ✅ 수정: 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
+      (setq insert-pt (polar hpile-pt outward-normal tf))
       
       (entmake
         (list
           '(0 . "INSERT")
           (cons 2 hpile-block)
           '(8 . "_측면말뚝")
-          (cons 10 adjusted-pt)
+          (cons 10 insert-pt)
           '(41 . 1.0)
           '(42 . 1.0)
           '(43 . 1.0)
