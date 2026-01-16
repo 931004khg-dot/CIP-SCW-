@@ -1950,7 +1950,7 @@
       (princ "\n[Warning] 오프셋이 안쪽으로 생성됨 - 방향 판단 오류 가능성")
       (debug-log "WARNING: 오프셋 면적이 작아짐")
     )
-    (princ "\n✓ 바깥쪽 오프셋 확인")
+    (princ "\n[OK] 바깥쪽 오프셋 확인")
   )
   
   (princ (strcat "\n오프셋 객체 생성 완료: " (vl-princ-to-string offset-obj)))
