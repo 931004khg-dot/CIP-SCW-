@@ -2039,20 +2039,30 @@
     ;; 회전 각도 = 선분 각도 - 90도 (웹이 경계선 안쪽을 향하도록)
     (setq hpile-rotation (- seg-angle (/ pi 2.0)))
     
+    ;; 아래 플랜지 면이 경계선과 일치하도록 삽입점 조정
+    ;; 블록 기준점 = 아래 플랜지 중심 (0, -half-h)
+    ;; 회전 후 경계선으로부터 half-h만큼 바깥쪽(회전 방향의 반대)으로 이동
+    ;; 바깥쪽 방향 = hpile-rotation + 180도 (회전 방향의 반대)
+    (setq outward-angle (+ hpile-rotation pi))
+    
     (foreach hpile-pt hpile-positions
+      ;; 아래 플랜지 면이 경계선에 닿도록 삽입점 조정
+      (setq adjusted-pt (polar hpile-pt outward-angle half-h))
+      
       (entmake
         (list
           '(0 . "INSERT")
           (cons 2 hpile-block)
           '(8 . "_측면말뚝")
-          (cons 10 hpile-pt)
+          (cons 10 adjusted-pt)
           '(41 . 1.0)
           '(42 . 1.0)
           '(43 . 1.0)
           (cons 50 hpile-rotation)
         )
       )
-      (debug-log (strcat "직선 H-Pile 배치: (" (rtos (car hpile-pt) 2 2) ", " (rtos (cadr hpile-pt) 2 2) ")"))
+      (debug-log (strcat "직선 H-Pile 배치: 원래=" (rtos (car hpile-pt) 2 2) "," (rtos (cadr hpile-pt) 2 2) 
+                         " → 조정=" (rtos (car adjusted-pt) 2 2) "," (rtos (cadr adjusted-pt) 2 2)))
     )
   )
   
