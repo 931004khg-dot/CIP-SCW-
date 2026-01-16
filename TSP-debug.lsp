@@ -1668,16 +1668,28 @@
   ;; 웹 방향이 띠장 모서리(이등분선 방향)를 향해야 함
   (if is-convex
     (progn
-      ;; 볼록 모서리: 회전 = 이등분선 각도
+      ;; 볼록 모서리: 회전 = 이등분선 - 90도
       (setq insert-point vertex)
-      (setq hpile-rotation bisector-angle)
+      (setq hpile-rotation (- bisector-angle (/ pi 2.0)))
     )
     (progn
-      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 이등분선 + 180도
+      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 이등분선 + 90도
       (setq offset-dir (+ bisector-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
-      (setq hpile-rotation offset-dir)
+      (setq hpile-rotation (+ bisector-angle (/ pi 2.0)))
       (debug-log (strcat "오목 모서리: B/2 오프셋=" (rtos half-b 2 2) "mm"))
+    )
+  )
+  
+  ;; 이등분선 시각화 (빨간색 LINE, 1000mm 길이)
+  (setq bisector-end (polar vertex bisector-angle 1000.0))
+  (entmake
+    (list
+      '(0 . "LINE")
+      '(8 . "_DEBUG")
+      '(62 . 1)  ; 빨간색
+      (cons 10 vertex)
+      (cons 11 bisector-end)
     )
   )
   
@@ -1744,6 +1756,20 @@
   ;; 토류판 너비 계산
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
   (debug-log (strcat "토류판 너비: " (rtos timber-width 2 2) "mm"))
+  
+  ;; DEBUG 레이어 생성 (이등분선 시각화용)
+  (if (not (tblsearch "LAYER" "_DEBUG"))
+    (entmake
+      (list
+        '(0 . "LAYER")
+        '(100 . "AcDbSymbolTableRecord")
+        '(100 . "AcDbLayerTableRecord")
+        '(2 . "_DEBUG")
+        '(70 . 0)
+        '(62 . 1)  ; 빨간색
+      )
+    )
+  )
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
