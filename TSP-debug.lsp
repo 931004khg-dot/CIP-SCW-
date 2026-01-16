@@ -14,9 +14,9 @@
 ;;; 전역 변수
 ;;; ----------------------------------------------------------------------
 
-(setq *tsp-hpile-spec* "H 298×201×9/14")     ; H-Pile 규격
+(setq *tsp-hpile-spec* "H 298x201x9/14")     ; H-Pile 규격
 (setq *tsp-hpile-custom* '(298 201 9 14))    ; User-defined H-Pile
-(setq *tsp-wale-spec* "H 300×300×10/15")      ; 띠장 규격
+(setq *tsp-wale-spec* "H 300x300x10/15")      ; 띠장 규격
 (setq *tsp-wale-custom* '(300 300 10 15))     ; User-defined 띠장
 (setq *tsp-ctc* 2.0)                           ; C.T.C 값
 (setq *tsp-timber-thickness* 60)               ; 토류판 두께 (mm)
@@ -424,7 +424,7 @@
 
 ;; parse-h-spec 재정의
 (defun parse-h-spec (spec-str / clean-str char-list i ch result-str parsed-result)
-  ;; "H 298×201×9/14" -> (298 201 9 14)
+  ;; "H 298x201x9/14" -> (298 201 9 14)
   ;; 모든 문자를 하나씩 검사하여 숫자와 공백만 남김
   (debug-log (strcat "parse-h-spec 입력: \"" (if spec-str spec-str "nil") "\""))
   
@@ -726,12 +726,12 @@
       (debug-log "tsp_hpile 다이얼로그 표시 준비 완료")
       ;; 드롭다운 리스트 초기화
       (start_list "hpile_spec")
-      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
+      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
       (end_list)
-      (set_tile "hpile_spec" "0")  ; 기본값: H 298×201×9/14
+      (set_tile "hpile_spec" "0")  ; 기본값: H 298x201x9/14
       
       (start_list "wale_spec")
-      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
+      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
       (end_list)
       (set_tile "wale_spec" "1")  ; 기본값: H 300×300×10/15
       
@@ -1868,18 +1868,18 @@
   (if (is-closed-polyline boundary-ent)
     ;; 폐합선: 자동으로 방향 계산
     (progn
-      (princ "\n→ 폐합 다각형 감지")
+      (princ "\n- 폐합 다각형 감지")
       (setq boundary-orient (get-polygon-orientation vertices))
       (if (= boundary-orient 1)
-        (princ "\n→ CCW(반시계): 외부 방향 자동 계산 (왼쪽 = 바깥)")
-        (princ "\n→ CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
+        (princ "\n- CCW(반시계): 외부 방향 자동 계산 (왼쪽 = 바깥)")
+        (princ "\n- CW(시계): 외부 방향 자동 계산 (오른쪽 = 바깥)")
       )
       (debug-log (strcat "폐합선 - 자동 방향: " (if (= boundary-orient 1) "CCW" "CW")))
     )
     
     ;; 열린선: 사용자에게 클릭 요청
     (progn
-      (princ "\n→ 열린 경계선 감지")
+      (princ "\n- 열린 경계선 감지")
       (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
       (setq user-pt (getpoint))
       
@@ -1903,11 +1903,11 @@
       (if (> cross-z 0)
         (progn
           (setq boundary-orient 1)   ; 왼쪽 클릭 = CCW
-          (princ "\n→ 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
+          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
         )
         (progn
           (setq boundary-orient -1)  ; 오른쪽 클릭 = CW
-          (princ "\n→ 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
+          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
         )
       )
       (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "왼쪽(CCW)" "오른쪽(CW)")))
@@ -2203,15 +2203,15 @@
       (princ (strcat "\n  직선 H-Pile: " (itoa (length hpile-positions)) "개"))
     )
     
-    ;; ✅ 수정: 외부 법선 방향 계산
-    ;; 경계선의 외부 방향 = seg-angle + (boundary-orient × 90°)
+    ;; 외부 법선 방향 계산
+    ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90 deg)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; ✅ 수정: 웹이 바깥을 향하도록 회전
+    ;; 웹이 바깥을 향하도록 회전
     (setq hpile-rotation outward-normal)
     
     (foreach hpile-pt hpile-positions
-      ;; ✅ 수정: 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
+      ;; 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
       (setq insert-pt (polar hpile-pt outward-normal tf))
       
       (entmake
