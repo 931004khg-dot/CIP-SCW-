@@ -1791,18 +1791,18 @@
 )
 
 ;; 토류판 개별 객체 생성 (블록 대신 직접 생성)
-(defun create-timber-panel-object (center-pt width height angle / half-width half-height cos-a sin-a pt1 pt2 pt3 pt4 timber-pline timber-obj doc mspace hatch-obj sa)
+(defun create-timber-panel-object (center-pt width height rot-angle / half-width half-height cos-a sin-a pt1 pt2 pt3 pt4 timber-pline timber-obj doc mspace hatch-obj sa)
   ;; center-pt: 중심점 (삽입점)
   ;; width: 토류판 수평 길이 (C.T.C - 50mm)
   ;; height: 토류판 높이 (thickness, 예: 60mm)
-  ;; angle: 회전 각도 (라디안)
+  ;; rot-angle: 회전 각도 (라디안) - 내장 함수 angle과 충돌 방지
   
   (setq half-width (/ width 2.0))
   (setq half-height (/ height 2.0))
   
   ;; 회전 행렬 계산
-  (setq cos-a (cos angle))
-  (setq sin-a (sin angle))
+  (setq cos-a (cos rot-angle))
+  (setq sin-a (sin rot-angle))
   
   ;; 중심점 기준 4개 꼭지점 계산 (회전 적용)
   ;; 좌하: (-half-width, -half-height)
@@ -2025,22 +2025,18 @@
       (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
       (setq user-pt (getpoint))
       
-      ;; 첫 번째 선분 기준으로 좌/우 판별
+      ;; 첫 번째 선분 기준으로 외적 공식으로 좌/우 판별
       (setq pt1 (car vertices))
       (setq pt2 (cadr vertices))
-      (setq seg-angle (angle pt1 pt2))
-      (setq mid-pt (polar pt1 seg-angle (/ (distance pt1 pt2) 2.0)))
       
-      ;; 왼쪽 테스트 포인트 (진행방향의 왼쪽)
-      (setq left-test-pt (polar mid-pt (+ seg-angle (/ pi 2.0)) 1000.0))
-      
-      ;; 외적으로 좌/우 판별
-      (setq v1 (list (- (car user-pt) (car mid-pt)) 
-                     (- (cadr user-pt) (cadr mid-pt))))
-      (setq v2 (list (- (car left-test-pt) (car mid-pt)) 
-                     (- (cadr left-test-pt) (cadr mid-pt))))
-      (setq cross-z (- (* (car v1) (cadr v2)) 
-                       (* (cadr v1) (car v2))))
+      ;; 외적 공식: S = (x2-x1)*(y-y1) - (y2-y1)*(x-x1)
+      ;; S > 0: 왼쪽 (CCW), S < 0: 오른쪽 (CW)
+      (setq cross-z 
+        (- (* (- (car pt2) (car pt1)) 
+              (- (cadr user-pt) (cadr pt1)))
+           (* (- (cadr pt2) (cadr pt1)) 
+              (- (car user-pt) (car pt1))))
+      )
       
       (if (> cross-z 0)
         (progn
@@ -2099,19 +2095,19 @@
   (setq hpile-block (create-hpile-section-block h b tw tf))
   (debug-log (strcat "H-Pile 블록: " hpile-block))
   
-  ;; ===== 1단계: 경계선을 timber-offset만큼 바깥쪽으로 오프셋 =====
-  (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 바깥쪽)..."))
+  ;; ===== 1단계: 경계선을 timber-offset만큼 **안쪽**으로 오프셋 (띠장은 내부) =====
+  (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 안쪽 - 띠장용)..."))
   (setq boundary-vla (vlax-ename->vla-object boundary-ent))
   
   ;; 원본 경계선 면적 계산
   (setq original-area (vla-get-area boundary-vla))
   (debug-log (strcat "원본 면적: " (rtos original-area 2 2)))
   
-  ;; 경계선 방향에 따라 확정된 오프셋 부호 사용
-  ;; CCW (offset-sign=1): +timber-offset = 바깥쪽
-  ;; CW (offset-sign=-1): -timber-offset = 바깥쪽
+  ;; 띠장은 경계선 **안쪽**에 배치되므로 오프셋 방향을 반대로
+  ;; CCW (offset-sign=1): -timber-offset = 안쪽
+  ;; CW (offset-sign=-1): +timber-offset = 안쪽
   (setq offset-vla (vl-catch-all-apply 'vla-offset 
-    (list boundary-vla (* timber-offset offset-sign))))
+    (list boundary-vla (* timber-offset (- offset-sign)))))
   
   ;; 오류 처리 (복잡한 다각형에서 자기 교차 발생 시)
   (if (vl-catch-all-error-p offset-vla)
@@ -2141,13 +2137,13 @@
   (princ (strcat "\n오프셋 후 면적: " (rtos offset-area 2 2)))
   (debug-log (strcat "오프셋 면적: " (rtos offset-area 2 2)))
   
-  ;; 면적 검증 (바깥쪽 오프셋은 면적이 커야 함)
-  (if (<= offset-area original-area)
+  ;; 면적 검증 (안쪽 오프셋은 면적이 작아야 함)
+  (if (>= offset-area original-area)
     (progn
-      (princ "\n[Warning] 오프셋이 안쪽으로 생성됨 - 방향 판단 오류 가능성")
-      (debug-log "WARNING: 오프셋 면적이 작아짐")
+      (princ "\n[Warning] 오프셋이 바깥쪽으로 생성됨 - 방향 판단 오류 가능성")
+      (debug-log "WARNING: 오프셋 면적이 커짐 (안쪽이어야 함)")
     )
-    (princ "\n[OK] 바깥쪽 오프셋 확인")
+    (princ "\n[OK] 안쪽 오프셋 확인 (띠장용)")
   )
   
   (princ (strcat "\n오프셋 객체 생성 완료: " (vl-princ-to-string offset-obj)))
@@ -2368,15 +2364,15 @@
     ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90도)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; H-Pile 회전 = 외부 법선 방향 (웹이 바깥을 향하도록)
-    ;; H-Pile 블록은 기본적으로 웹이 Y축(위)을 향하므로
-    ;; outward-normal 방향으로 회전시키면 웹이 바깥을 향함
-    (setq hpile-rotation outward-normal)
+    ;; H-Pile 회전 = 외부 법선 방향 - 90도 (블록이 기본적으로 90도 서있음)
+    ;; H-Pile 블록은 기본적으로 웹이 Y축(90도, North)을 향함
+    ;; outward-normal - 90도로 회전시켜야 웹이 바깥을 향함
+    (setq hpile-rotation (- outward-normal (/ pi 2.0)))
     
     (foreach hpile-pt hpile-positions
       ;; hpile-pt는 원본 경계선 위의 점
-      ;; 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
-      (setq insert-pt (polar hpile-pt outward-normal tf))
+      ;; 블록의 기준점이 이미 하부 플랜지 중심이므로 그대로 삽입
+      (setq insert-pt hpile-pt)
       
       (entmake
         (list
