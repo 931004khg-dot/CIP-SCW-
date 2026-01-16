@@ -726,12 +726,12 @@
       (debug-log "tsp_hpile 다이얼로그 표시 준비 완료")
       ;; 드롭다운 리스트 초기화
       (start_list "hpile_spec")
-      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
+      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
       (end_list)
-      (set_tile "hpile_spec" "0")  ; 기본값: H 298x201x9/14
+      (set_tile "hpile_spec" "0")  ; 기본값: H 298×201×9/14
       
       (start_list "wale_spec")
-      (mapcar 'add_list '("H 298x201x9/14" "H 300x300x10/15" "H 350x350x12/19" "H 400x400x13/21" "User-defined"))
+      (mapcar 'add_list '("H 298×201×9/14" "H 300×300×10/15" "H 350×350×12/19" "H 400×400×13/21" "User-defined"))
       (end_list)
       (set_tile "wale_spec" "1")  ; 기본값: H 300×300×10/15
       
@@ -2203,12 +2203,14 @@
       (princ (strcat "\n  직선 H-Pile: " (itoa (length hpile-positions)) "개"))
     )
     
-    ;; 외부 법선 방향 계산
-    ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90 deg)
+    ;; 외부 법선 방향 계산 (웹이 향할 방향)
+    ;; 경계선의 외부 방향 = seg-angle + (boundary-orient * 90도)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; 웹이 바깥을 향하도록 회전
-    (setq hpile-rotation outward-normal)
+    ;; H-Pile 회전 = 경계선 방향 (웹이 수직을 유지하도록)
+    ;; H-Pile 블록은 기본적으로 웹이 수직(Y축)이므로
+    ;; 경계선 방향으로 회전시키면 웹도 경계선과 평행하게 됨
+    (setq hpile-rotation seg-angle)
     
     (foreach hpile-pt hpile-positions
       ;; 하부 플랜지가 경계선에 닿도록 tf만큼 바깥으로 오프셋
