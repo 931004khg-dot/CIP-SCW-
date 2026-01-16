@@ -1642,9 +1642,11 @@
 )
 
 ;; 모서리(꼭지점)에 H-Pile 배치 (블록 기준점 사용 - 아래 플랜지 중심)
-(defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block / 
-  interior-angle exterior-angle bisector-angle is-convex half-h half-b 
-  hpile-rotation insert-point offset-dir bisector-end)
+;; timber-offset: 토류판 오프셋 거리 (띠장까지의 거리)
+(defun place-hpile-at-corner-simple (vertex angle1 angle2 h b tw tf hpile-block timber-offset / 
+  interior-angle exterior-angle bisector-angle wale-corner-angle is-convex half-h half-b 
+  hpile-rotation insert-point offset-dir bisector-end wale-corner prev-dir next-dir
+  prev-wale-pt next-wale-pt wale-dir-angle)
   
   ;; H-Pile 크기
   (setq half-h (/ h 2.0))  ; 149 mm
@@ -1667,30 +1669,51 @@
   (setq is-convex (< interior-angle pi))
   (princ (if is-convex "\n  타입: 볼록(Convex)" "\n  타입: 오목(Concave)"))
   
-  ;; 각의 이등분선 계산 (경계선 내부 방향)
+  ;; 각의 이등분선 계산 (기하학적 이등분선)
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
-  (princ (strcat "\n  이등분선=" (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
+  (princ (strcat "\n  기하학 이등분선=" (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
+  
+  ;; ★★★ 띠장 모서리 방향 계산 ★★★
+  ;; 띠장 = 경계선에서 수직으로 timber-offset만큼 떨어진 선
+  ;; 이전 선분의 수직 방향 (바깥쪽)
+  (setq prev-dir (+ angle1 (/ pi 2.0)))
+  (setq prev-wale-pt (polar vertex prev-dir timber-offset))
+  
+  ;; 다음 선분의 수직 방향 (바깥쪽)
+  (setq next-dir (+ angle2 (/ pi 2.0)))
+  (setq next-wale-pt (polar vertex next-dir timber-offset))
+  
+  ;; 띠장 모서리 = 두 오프셋 점의 중점 (근사값)
+  (setq wale-corner (list
+    (/ (+ (car prev-wale-pt) (car next-wale-pt)) 2.0)
+    (/ (+ (cadr prev-wale-pt) (cadr next-wale-pt)) 2.0)
+    0.0
+  ))
+  
+  ;; 경계선 꼭지점 → 띠장 모서리 방향
+  (setq wale-corner-angle (angle vertex wale-corner))
+  (princ (strcat "\n  띠장 모서리 방향=" (rtos (* wale-corner-angle (/ 180.0 pi)) 2 1) "도"))
   
   ;; H-Pile 회전 각도 및 삽입점 계산
   ;; 블록 기준점 = 아래 플랜지 중심
-  ;; 웹 방향이 띠장 모서리(이등분선 방향)를 향해야 함
+  ;; 웹 방향이 띠장 모서리를 향해야 함
   (if is-convex
     (progn
-      ;; 볼록 모서리: 회전 = 이등분선 - 90도
+      ;; 볼록 모서리: 회전 = 띠장방향 - 90도
       (setq insert-point vertex)
-      (setq hpile-rotation (- bisector-angle (/ pi 2.0)))
-      (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (이등분선-90)"))
+      (setq hpile-rotation (- wale-corner-angle (/ pi 2.0)))
+      (princ (strcat "\n  H-Pile 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도 (띠장방향-90)"))
     )
     (progn
-      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 이등분선 + 90도
-      (setq offset-dir (+ bisector-angle pi))
+      ;; 오목 모서리: B/2 바깥쪽 오프셋, 회전 = 띠장방향 + 90도
+      (setq offset-dir (+ wale-corner-angle pi))
       (setq insert-point (polar vertex offset-dir half-b))
-      (setq hpile-rotation (+ bisector-angle (/ pi 2.0)))
+      (setq hpile-rotation (+ wale-corner-angle (/ pi 2.0)))
       (princ (strcat "\n  오목: B/2 오프셋=" (rtos half-b 2 2) "mm, 회전=" (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "도"))
     )
   )
   
-  ;; 이등분선 시각화 (빨간색 LINE, 1000mm 길이)
+  ;; 기하학적 이등분선 시각화 (빨간색 LINE, 1000mm 길이)
   (setq bisector-end (polar vertex bisector-angle 1000.0))
   (entmake
     (list
@@ -1699,6 +1722,17 @@
       '(62 . 1)  ; 빨간색
       (cons 10 vertex)
       (cons 11 bisector-end)
+    )
+  )
+  
+  ;; 띠장 모서리 방향 시각화 (초록색 LINE, 1000mm 길이)
+  (entmake
+    (list
+      '(0 . "LINE")
+      '(8 . "_DEBUG")
+      '(62 . 3)  ; 초록색
+      (cons 10 vertex)
+      (cons 11 (polar vertex wale-corner-angle 1000.0))
     )
   )
   
@@ -2093,8 +2127,8 @@
     (setq angle1 (angle prev-vertex curr-vertex))
     (setq angle2 (angle curr-vertex next-vertex))
     
-    ;; H-Pile 배치
-    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block)
+    ;; H-Pile 배치 (timber-offset 전달)
+    (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset)
     
     (setq i (+ i 1))
   )
