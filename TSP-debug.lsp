@@ -14,9 +14,9 @@
 ;;; 전역 변수
 ;;; ----------------------------------------------------------------------
 
-(setq *tsp-hpile-spec* "H 298x201x9/14")     ; H-Pile 규격
+(setq *tsp-hpile-spec* "H 298×201×9/14")     ; H-Pile 규격 (× 유니코드)
 (setq *tsp-hpile-custom* '(298 201 9 14))    ; User-defined H-Pile
-(setq *tsp-wale-spec* "H 300x300x10/15")      ; 띠장 규격
+(setq *tsp-wale-spec* "H 300×300×10/15")      ; 띠장 규격 (× 유니코드)
 (setq *tsp-wale-custom* '(300 300 10 15))     ; User-defined 띠장
 (setq *tsp-ctc* 2.0)                           ; C.T.C 값
 (setq *tsp-timber-thickness* 60)               ; 토류판 두께 (mm)
@@ -29,15 +29,18 @@
 (setq *tsp-debug-log* '())                     ; 디버그 로그 리스트
 
 ;;; ----------------------------------------------------------------------
-;;; 디버그 로그 함수
+;;; 디버그 로그 함수 (안전 장치 추가)
 ;;; ----------------------------------------------------------------------
 
-(defun debug-log (msg / timestamp)
-  (if *tsp-debug*
-    (progn
-      (setq timestamp (rtos (getvar "MILLISECS") 2 0))
-      (setq *tsp-debug-log* (append *tsp-debug-log* (list (strcat "[" timestamp "ms] " msg))))
-      (princ (strcat "\n[DEBUG] " msg))
+;; debug-log 함수 안전 정의 (이미 있으면 재정의 안 함)
+(if (not debug-log)
+  (defun debug-log (msg / timestamp)
+    (if *tsp-debug*
+      (progn
+        (setq timestamp (rtos (getvar "MILLISECS") 2 0))
+        (setq *tsp-debug-log* (append *tsp-debug-log* (list (strcat "[" timestamp "ms] " msg))))
+        (princ (strcat "\n[DEBUG] " msg))
+      )
     )
   )
 )
@@ -719,15 +722,15 @@
   (debug-log (strcat "원본 경계선 면적: " (rtos original-area 2 2)))
   
   ;; 객체 2: tf 옵셋 - 빨간색 (안쪽)
-  ;; 음수 오프셋 = 안쪽, 양수 오프셋 = 바깥쪽
-  (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- tf))))
+  ;; 띄장은 경계선 안쪽이므로 offset-sign의 반대 방향
+  (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf (- offset-sign)))))
   
   (if (vl-catch-all-error-p obj2-vla)
     (progn
-      ;; 음수 오프셋 실패 시 양수로 시도
-      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
-      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
-      (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla tf)))
+      ;; 오프셋 실패 시 반대 방향으로 재시도
+      (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
+      (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
+      (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf offset-sign))))
     )
   )
   
@@ -787,13 +790,13 @@
   )
   
   ;; 객체 3: (H - tf) 옵셋 - 빨간색 (안쪽)
-  (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- (- h tf)))))
+  (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) (- offset-sign)))))
   
   (if (vl-catch-all-error-p obj3-vla)
     (progn
-      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
-      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
-      (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- h tf))))
+      (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
+      (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
+      (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) offset-sign))))
     )
   )
   
@@ -848,13 +851,13 @@
   )
   
   ;; 객체 4: H 옵셋 - 초록색 (안쪽)
-  (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (- h))))
+  (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h (- offset-sign)))))
   
   (if (vl-catch-all-error-p obj4-vla)
     (progn
-      (princ "\n[Warning] 음수 오프셋 실패, 양수 오프셋 시도...")
-      (debug-log "WARNING: 음수 오프셋 실패, 양수 오프셋 시도")
-      (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla h)))
+      (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
+      (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
+      (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h offset-sign))))
     )
   )
   
@@ -1169,11 +1172,32 @@
          (princ (strcat "\n- C.T.C: " (rtos *tsp-ctc* 2 2) "m"))
          (princ (strcat "\n- 토류판 두께: " (itoa *tsp-timber-thickness*) "mm\n"))
          
-         ;; 경계선 선택
-         (princ "\n경계선을 선택하세요 (Polyline 또는 Line): ")
-         (setq boundary-ent (car (entsel)))
+         ;; 경계선 선택 루프 (빈 공간 클릭 시 재시도)
+         (setq boundary-ent nil)
+         (setvar "ERRNO" 0) ; 에러 번호 초기화
          
-         (if boundary-ent
+         (while (not boundary-ent)
+           (setq sel (entsel "\n경계선을 선택하세요 (Polyline 또는 Line): "))
+           
+           (cond
+             ;; 1. 정상 선택
+             ((/= sel nil)
+              (setq boundary-ent (car sel)))
+             
+             ;; 2. 빈 공간 클릭 (ERRNO = 7) -> 재시도
+             ((= (getvar "ERRNO") 7)
+              (princ "\n[안내] 빈 공간을 클릭했습니다. 객체를 정확히 선택해주세요.\n")
+              (setvar "ERRNO" 0))
+             
+             ;; 3. ESC 또는 Enter (취소)
+             (t
+              (princ "\n선택이 취소되었습니다.")
+              (setq boundary-ent "CANCEL") ; 루프 탈출용 값
+             )
+           )
+         )
+         
+         (if (and boundary-ent (/= boundary-ent "CANCEL"))
            (progn
              (princ "\n경계선 선택 완료!")
              (debug-log (strcat "경계선 엔티티: " (vl-princ-to-string boundary-ent)))
