@@ -255,21 +255,22 @@
               (- (car user-pt) (car pt1))))
       )
       
-      ;; 사용자가 클릭한 방향 = 바깥쪽
-      ;; boundary-orient = +1 (바깥쪽 방향으로 고정)
-      (setq boundary-orient 1)
-      
+      ;; 사용자가 클릭한 방향에 따라 boundary-orient 결정
+      ;; 왼쪽 클릭 (cross-z > 0) → CCW 방향과 동일 → boundary-orient = 1
+      ;; 오른쪽 클릭 (cross-z < 0) → CW 방향과 동일 → boundary-orient = -1
       (if (> cross-z 0)
         (progn
+          (setq boundary-orient 1)
           (setq side-text "왼쪽")
           (princ "\n- 사용자 선택: 진행방향의 왼쪽 (바깥쪽)")
         )
         (progn
+          (setq boundary-orient -1)
           (setq side-text "오른쪽")
           (princ "\n- 사용자 선택: 진행방향의 오른쪽 (바깥쪽)")
         )
       )
-      (debug-log (strcat "열린선 - 사용자 클릭: " side-text " (바깥쪽=+1로 고정)"))
+      (debug-log (strcat "열린선 - 사용자 클릭: " side-text " (boundary-orient=" (itoa boundary-orient) ")"))
       
       boundary-orient  ; 반환
     )
