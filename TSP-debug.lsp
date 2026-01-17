@@ -257,15 +257,15 @@
       
       (if (> cross-z 0)
         (progn
-          (setq boundary-orient 1)   ; 왼쪽 클릭 = CCW
-          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CCW 방향)")
+          (setq boundary-orient -1)   ; 왼쪽 클릭 = CW (띠장이 안쪽)
+          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CW 방향)")
         )
         (progn
-          (setq boundary-orient -1)  ; 오른쪽 클릭 = CW
-          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CW 방향)")
+          (setq boundary-orient 1)  ; 오른쪽 클릭 = CCW (띠장이 안쪽)
+          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CCW 방향)")
         )
       )
-      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "왼쪽(CCW)" "오른쪽(CW)")))
+      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "오른쪽(CCW)" "왼쪽(CW)")))
       
       boundary-orient  ; 반환
     )
@@ -674,11 +674,12 @@
   (debug-log (strcat "wale-spec: " wale-spec))
   (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
-  ;; 오프셋 부호 결정 (띠장은 안쪽이므로 반대 방향)
-  ;; CCW (boundary-orient=1): -1 = 안쪽
-  ;; CW (boundary-orient=-1): +1 = 안쪽
+  ;; 오프셋 부호 결정
+  ;; CCW (boundary-orient=1): 양수 오프셋 = 바깥쪽 (띠장은 안쪽에 배치)
+  ;; CW (boundary-orient=-1): 음수 오프셋 = 안쪽 (띠장은 바깥쪽에 배치)
+  ;; 반대 부호 사용: 띠장은 항상 안쪽
   (setq offset-sign (- boundary-orient))
-  (debug-log (strcat "띠장 오프셋 부호 (안쪽): " (if (= offset-sign 1) "+" "-")))
+  (debug-log (strcat "띠장 오프셋 부호 (안쪽): " (if (> offset-sign 0) "+" "-")))
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
@@ -2437,11 +2438,12 @@
     (princ (strcat "\n    boundary-orient: " (itoa boundary-orient)))
     (princ (strcat "\n    외부 법선(outward-normal): " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
     
-    ;; H-Pile 회전 = 외부 법선 방향 + 90도 (블록이 기본적으로 90도 서있음)
-    ;; H-Pile 블록은 기본적으로 웹이 Y축(90도, North)을 향함
-    ;; outward-normal + 90도로 회전시켜야 상부 플랜지가 바깥을 향함
-    ;; (이전에 -90도를 했더니 안쪽을 향해서 180도 차이 보정)
-    (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
+    ;; H-Pile 회전 = 외부 법선 방향
+    ;; H-Pile 블록의 기준점(0,0)은 하단 플랜지 중심
+    ;; 회전 0도: 플랜지가 위/아래 (수직)
+    ;; 회전 90도: 플랜지가 좌/우 (수평)
+    ;; outward-normal 방향으로 회전하면 플랜지가 바깥을 향함
+    (setq hpile-rotation outward-normal)
     (princ (strcat "\n    H-Pile 회전각: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "°"))
     
     (foreach hpile-pt hpile-positions
