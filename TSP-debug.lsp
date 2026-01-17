@@ -247,7 +247,7 @@
       (setq pt2 (cadr vertices))
       
       ;; 외적 공식: S = (x2-x1)*(y-y1) - (y2-y1)*(x-x1)
-      ;; S > 0: 왼쪽 (CCW), S < 0: 오른쪽 (CW)
+      ;; S > 0: 왼쪽, S < 0: 오른쪽
       (setq cross-z 
         (- (* (- (car pt2) (car pt1)) 
               (- (cadr user-pt) (cadr pt1)))
@@ -255,17 +255,21 @@
               (- (car user-pt) (car pt1))))
       )
       
+      ;; 사용자가 클릭한 방향 = 바깥쪽
+      ;; boundary-orient = +1 (바깥쪽 방향)
+      (setq boundary-orient 1)
+      
       (if (> cross-z 0)
         (progn
-          (setq boundary-orient -1)   ; 왼쪽 클릭 = CW (띠장이 안쪽)
-          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (CW 방향)")
+          (setq side-text "왼쪽")
+          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (바깥쪽)")
         )
         (progn
-          (setq boundary-orient 1)  ; 오른쪽 클릭 = CCW (띠장이 안쪽)
-          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (CCW 방향)")
+          (setq side-text "오른쪽")
+          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (바깥쪽)")
         )
       )
-      (debug-log (strcat "열린선 - 사용자 선택: " (if (= boundary-orient 1) "오른쪽(CCW)" "왼쪽(CW)")))
+      (debug-log (strcat "열린선 - 사용자 클릭: " side-text " (바깥쪽으로 설정)"))
       
       boundary-orient  ; 반환
     )
@@ -672,14 +676,15 @@
 (defun create-wale-offsets (boundary-ent wale-spec boundary-orient / h b tw tf offset-list obj1 obj2 obj3 obj4 wale-values boundary-vla obj2-vla obj3-vla obj4-vla original-area offset-area offset-sign)
   (debug-log "=== create-wale-offsets 시작 ===")
   (debug-log (strcat "wale-spec: " wale-spec))
-  (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
+  (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "바깥쪽(1)" "안쪽(-1)")))
   
-  ;; 오프셋 부호 결정
-  ;; CCW (boundary-orient=1): 양수 오프셋 = 바깥쪽 (띠장은 안쪽에 배치)
-  ;; CW (boundary-orient=-1): 음수 오프셋 = 안쪽 (띠장은 바깥쪽에 배치)
-  ;; 반대 부호 사용: 띠장은 항상 안쪽
-  (setq offset-sign (- boundary-orient))
-  (debug-log (strcat "띠장 오프셋 부호 (안쪽): " (if (> offset-sign 0) "+" "-")))
+  ;; 오프셋 방향 결정
+  ;; boundary-orient = 1: 사용자가 바깥쪽 클릭 (열린선) 또는 CCW(닫힌선)
+  ;; 띠장: 항상 안쪽 → 음수 오프셋 필요
+  ;; 토류판: 항상 바깥쪽 → 양수 오프셋 필요
+  (setq wale-offset-sign -1)    ; 띠장은 항상 안쪽
+  (setq timber-offset-sign 1)   ; 토류판은 항상 바깥쪽
+  (debug-log "띠장 오프셋: 안쪽(-), 토류판 오프셋: 바깥쪽(+)")
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
@@ -723,15 +728,15 @@
   (debug-log (strcat "원본 경계선 면적: " (rtos original-area 2 2)))
   
   ;; 객체 2: tf 옵셋 - 빨간색 (안쪽)
-  ;; 띄장은 경계선 안쪽이므로 offset-sign의 반대 방향
-  (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf (- offset-sign)))))
+  ;; 띠장은 경계선 안쪽이므로 음수 오프셋
+  (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf wale-offset-sign))))
   
   (if (vl-catch-all-error-p obj2-vla)
     (progn
       ;; 오프셋 실패 시 반대 방향으로 재시도
       (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
       (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
-      (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf offset-sign))))
+      (setq obj2-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* tf (- wale-offset-sign)))))
     )
   )
   
@@ -764,7 +769,7 @@
           (debug-log "WARNING: tf 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj2-vla)
           ;; 반대 방향으로 오프셋
-          (setq obj2-vla (vla-offset boundary-vla (* tf offset-sign)))
+          (setq obj2-vla (vla-offset boundary-vla (* tf (- wale-offset-sign))))
           (if (= (type obj2-vla) 'variant)
             (setq obj2-vla (vlax-variant-value obj2-vla))
           )
@@ -797,13 +802,13 @@
   )
   
   ;; 객체 3: (H - tf) 옵셋 - 빨간색 (안쪽)
-  (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) (- offset-sign)))))
+  (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) wale-offset-sign))))
   
   (if (vl-catch-all-error-p obj3-vla)
     (progn
       (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
       (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
-      (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) offset-sign))))
+      (setq obj3-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* (- h tf) (- wale-offset-sign)))))
     )
   )
   
@@ -832,7 +837,7 @@
           (princ "\n[Warning] (H-tf) 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
           (debug-log "WARNING: (H-tf) 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj3-vla)
-          (setq obj3-vla (vla-offset boundary-vla (* (- h tf) offset-sign)))
+          (setq obj3-vla (vla-offset boundary-vla (* (- h tf) (- wale-offset-sign))))
           (if (= (type obj3-vla) 'variant)
             (setq obj3-vla (vlax-variant-value obj3-vla))
           )
@@ -861,13 +866,13 @@
   )
   
   ;; 객체 4: H 옵셋 - 초록색 (안쪽)
-  (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h (- offset-sign)))))
+  (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h wale-offset-sign))))
   
   (if (vl-catch-all-error-p obj4-vla)
     (progn
       (princ "\n[Warning] 오프셋 실패, 반대 방향으로 재시도...")
       (debug-log "WARNING: 오프셋 실패, 반대 방향으로 재시도")
-      (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h offset-sign))))
+      (setq obj4-vla (vl-catch-all-apply 'vla-offset (list boundary-vla (* h (- wale-offset-sign)))))
     )
   )
   
@@ -896,7 +901,7 @@
           (princ "\n[Warning] H 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
           (debug-log "WARNING: H 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj4-vla)
-          (setq obj4-vla (vla-offset boundary-vla (* h offset-sign)))
+          (setq obj4-vla (vla-offset boundary-vla (* h (- wale-offset-sign))))
           (if (= (type obj4-vla) 'variant)
             (setq obj4-vla (vlax-variant-value obj4-vla))
           )
@@ -2107,13 +2112,14 @@
   outward-normal insert-pt hpile-positions hpile-pt hpile-rotation)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
-  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
+  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "바깥쪽(1)" "안쪽(-1)")))
   
   ;; 오프셋 부호 결정
-  ;; boundary-orient: 1 = CCW (왼쪽=바깥), -1 = CW (오른쪽=바깥)
-  ;; AutoCAD의 양수 오프셋은 진행방향의 왼쪽
-  (setq offset-sign boundary-orient)
-  (debug-log (strcat "오프셋 부호: " (if (= offset-sign 1) "+" "-")))
+  ;; 토류판: 항상 바깥쪽 → 양수 오프셋
+  ;; H-Pile: 항상 바깥쪽 → 양수 오프셋
+  (setq timber-offset-sign 1)    ; 토류판은 항상 바깥쪽
+  (setq hpile-offset-sign 1)     ; H-Pile도 항상 바깥쪽
+  (debug-log "토류판/H-Pile 오프셋: 바깥쪽(+)")
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -2152,19 +2158,17 @@
   (setq hpile-block (create-hpile-section-block h b tw tf))
   (debug-log (strcat "H-Pile 블록: " hpile-block))
   
-  ;; ===== 1단계: 경계선을 timber-offset만큼 **안쪽**으로 오프셋 (띠장은 내부) =====
-  (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 안쪽 - 띠장용)..."))
+  ;; ===== 1단계: 경계선을 timber-offset만큼 **바깥쪽**으로 오프셋 (토류판은 외부) =====
+  (princ (strcat "\n\n[1단계] 경계선 오프셋 (" (rtos timber-offset 2 2) "mm 바깥쪽 - 토류판용)..."))
   (setq boundary-vla (vlax-ename->vla-object boundary-ent))
   
   ;; 원본 경계선 면적 계산
   (setq original-area (vla-get-area boundary-vla))
   (debug-log (strcat "원본 면적: " (rtos original-area 2 2)))
   
-  ;; 띠장은 경계선 **안쪽**에 배치되므로 오프셋 방향을 반대로
-  ;; CCW (offset-sign=1): -timber-offset = 안쪽
-  ;; CW (offset-sign=-1): +timber-offset = 안쪽
+  ;; 토류판은 경계선 **바깥쪽**에 배치되므로 양수 오프셋
   (setq offset-vla (vl-catch-all-apply 'vla-offset 
-    (list boundary-vla (* timber-offset (- offset-sign)))))
+    (list boundary-vla (* timber-offset timber-offset-sign))))
   
   ;; 오류 처리 (복잡한 다각형에서 자기 교차 발생 시)
   (if (vl-catch-all-error-p offset-vla)
@@ -2438,12 +2442,12 @@
     (princ (strcat "\n    boundary-orient: " (itoa boundary-orient)))
     (princ (strcat "\n    외부 법선(outward-normal): " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
     
-    ;; H-Pile 회전 = 외부 법선 방향
+    ;; H-Pile 회전 = 외부 법선 방향 + 90도
     ;; H-Pile 블록의 기준점(0,0)은 하단 플랜지 중심
     ;; 회전 0도: 플랜지가 위/아래 (수직)
     ;; 회전 90도: 플랜지가 좌/우 (수평)
-    ;; outward-normal 방향으로 회전하면 플랜지가 바깥을 향함
-    (setq hpile-rotation outward-normal)
+    ;; outward-normal + 90도로 회전하면 플랜지가 바깥을 향함
+    (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
     (princ (strcat "\n    H-Pile 회전각: " (rtos (* hpile-rotation (/ 180.0 pi)) 2 1) "°"))
     
     (foreach hpile-pt hpile-positions
