@@ -754,14 +754,16 @@
       (princ (strcat "\ntf 옵셋 후 면적: " (rtos offset-area 2 2)))
       (debug-log (strcat "tf 옵셋 후 면적: " (rtos offset-area 2 2)))
       
-      ;; 면적이 작아지지 않았으면 바깥쪽으로 옵셋된 것 → 삭제 후 반대 방향으로 재시도
-      (if (>= offset-area original-area)
+      ;; 열린 선이 아닌 경우에만 면적 비교로 방향 검증
+      (if (and (vlax-curve-isClosed boundary-vla) 
+               (>= original-area 0.01)
+               (>= offset-area original-area))
         (progn
           (princ "\n[Warning] tf 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
           (debug-log "WARNING: tf 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj2-vla)
           ;; 반대 방향으로 오프셋
-          (setq obj2-vla (vla-offset boundary-vla tf))
+          (setq obj2-vla (vla-offset boundary-vla (* tf offset-sign)))
           (if (= (type obj2-vla) 'variant)
             (setq obj2-vla (vlax-variant-value obj2-vla))
           )
@@ -775,6 +777,10 @@
           (setq offset-area (vla-get-area obj2-vla))
           (princ (strcat "\ntf 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
           (debug-log (strcat "tf 옵셋 재시도 후 면적: " (rtos offset-area 2 2)))
+        )
+        (progn
+          (princ "\n[INFO] 열린 선 또는 닫힌 경계 - offset-sign 방향으로 배치")
+          (debug-log "INFO: 열린 선 또는 닫힌 경계 - offset-sign 방향 사용")
         )
       )
       
@@ -817,12 +823,15 @@
       (princ (strcat "\n(H-tf) 옵셋 후 면적: " (rtos offset-area 2 2)))
       (debug-log (strcat "(H-tf) 옵셋 후 면적: " (rtos offset-area 2 2)))
       
-      (if (>= offset-area original-area)
+      ;; 열린 선이 아닌 경우에만 면적 비교로 방향 검증
+      (if (and (vlax-curve-isClosed boundary-vla)
+               (>= original-area 0.01)
+               (>= offset-area original-area))
         (progn
           (princ "\n[Warning] (H-tf) 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
           (debug-log "WARNING: (H-tf) 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj3-vla)
-          (setq obj3-vla (vla-offset boundary-vla (- h tf)))
+          (setq obj3-vla (vla-offset boundary-vla (* (- h tf) offset-sign)))
           (if (= (type obj3-vla) 'variant)
             (setq obj3-vla (vlax-variant-value obj3-vla))
           )
@@ -878,12 +887,15 @@
       (princ (strcat "\nH 옵셋 후 면적: " (rtos offset-area 2 2)))
       (debug-log (strcat "H 옵셋 후 면적: " (rtos offset-area 2 2)))
       
-      (if (>= offset-area original-area)
+      ;; 열린 선이 아닌 경우에만 면적 비교로 방향 검증
+      (if (and (vlax-curve-isClosed boundary-vla)
+               (>= original-area 0.01)
+               (>= offset-area original-area))
         (progn
           (princ "\n[Warning] H 옵셋이 바깥쪽으로 생성됨, 반대 방향으로 재시도...")
           (debug-log "WARNING: H 옵셋이 바깥쪽, 반대 방향으로 재시도")
           (vla-delete obj4-vla)
-          (setq obj4-vla (vla-offset boundary-vla h))
+          (setq obj4-vla (vla-offset boundary-vla (* h offset-sign)))
           (if (= (type obj4-vla) 'variant)
             (setq obj4-vla (vlax-variant-value obj4-vla))
           )
