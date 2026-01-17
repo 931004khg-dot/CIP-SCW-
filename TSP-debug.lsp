@@ -676,15 +676,22 @@
 (defun create-wale-offsets (boundary-ent wale-spec boundary-orient / h b tw tf offset-list obj1 obj2 obj3 obj4 wale-values boundary-vla obj2-vla obj3-vla obj4-vla original-area offset-area offset-sign)
   (debug-log "=== create-wale-offsets 시작 ===")
   (debug-log (strcat "wale-spec: " wale-spec))
-  (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "바깥쪽(1)" "안쪽(-1)")))
+  (debug-log (strcat "boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
   ;; 오프셋 방향 결정
-  ;; boundary-orient = 1: 사용자가 바깥쪽 클릭 (열린선) 또는 CCW(닫힌선)
-  ;; 띠장: 항상 안쪽 → 음수 오프셋 필요
-  ;; 토류판: 항상 바깥쪽 → 양수 오프셋 필요
-  (setq wale-offset-sign -1)    ; 띠장은 항상 안쪽
-  (setq timber-offset-sign 1)   ; 토류판은 항상 바깥쪽
-  (debug-log "띠장 오프셋: 안쪽(-), 토류판 오프셋: 바깥쪽(+)")
+  ;; boundary-orient: 1 = CCW (왼쪽=안쪽), -1 = CW (오른쪽=안쪽)
+  ;; AutoCAD 양수 오프셋 = 진행방향의 왼쪽
+  ;; 
+  ;; 띠장: 항상 안쪽
+  ;;   - CCW(1): 왼쪽=안쪽 → 음수 오프셋
+  ;;   - CW(-1): 오른쪽=안쪽 → 양수 오프셋
+  ;; 
+  ;; 토류판: 항상 바깥쪽
+  ;;   - CCW(1): 오른쪽=바깥 → 양수 오프셋
+  ;;   - CW(-1): 왼쪽=바깥 → 음수 오프셋
+  (setq wale-offset-sign (- boundary-orient))      ; 띠장: 안쪽
+  (setq timber-offset-sign boundary-orient)         ; 토류판: 바깥쪽
+  (debug-log (strcat "띠장 오프셋 부호: " (itoa wale-offset-sign) ", 토류판 오프셋 부호: " (itoa timber-offset-sign)))
   
   ;; 레이어 생성
   (create-layer-if-not-exists "_띠장(wale)" "3")
@@ -2112,14 +2119,13 @@
   outward-normal insert-pt hpile-positions hpile-pt hpile-rotation)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
-  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "바깥쪽(1)" "안쪽(-1)")))
+  (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
   ;; 오프셋 부호 결정
-  ;; 토류판: 항상 바깥쪽 → 양수 오프셋
-  ;; H-Pile: 항상 바깥쪽 → 양수 오프셋
-  (setq timber-offset-sign 1)    ; 토류판은 항상 바깥쪽
-  (setq hpile-offset-sign 1)     ; H-Pile도 항상 바깥쪽
-  (debug-log "토류판/H-Pile 오프셋: 바깥쪽(+)")
+  ;; boundary-orient: 1 = CCW (왼쪽=안쪽), -1 = CW (오른쪽=안쪽)
+  ;; 토류판: 항상 바깥쪽 = boundary-orient
+  (setq timber-offset-sign boundary-orient)
+  (debug-log (strcat "토류판 오프셋 부호: " (itoa timber-offset-sign)))
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
