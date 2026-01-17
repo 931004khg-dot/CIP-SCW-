@@ -256,7 +256,7 @@
       )
       
       ;; 사용자가 클릭한 방향 = 바깥쪽
-      ;; boundary-orient = +1 (바깥쪽 방향)
+      ;; boundary-orient = +1 (바깥쪽 방향으로 고정)
       (setq boundary-orient 1)
       
       (if (> cross-z 0)
@@ -269,7 +269,7 @@
           (princ "\n- 사용자 선택: 진행방향의 오른쪽 (바깥쪽)")
         )
       )
-      (debug-log (strcat "열린선 - 사용자 클릭: " side-text " (바깥쪽으로 설정)"))
+      (debug-log (strcat "열린선 - 사용자 클릭: " side-text " (바깥쪽=+1로 고정)"))
       
       boundary-orient  ; 반환
     )
