@@ -771,12 +771,16 @@
            (progn
              (princ "\n경계선 선택 완료!")
              
+             ;; ★★★ 경계선 방향 판별 ★★★
+             (setq boundary-orient (determine-boundary-orientation-simple boundary-ent))
+             (princ (strcat "\n판별 결과: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
+             
              ;; 띠장 옵셋 생성
              (create-wale-offsets boundary-ent *tsp-wale-spec*)
              
-             ;; H-Pile 세트 생성 (경계선의 가장 긴 세그먼트 중간에 생성)
+             ;; H-Pile 세트 생성 (boundary-orient 전달)
              (princ "\n\n>>> H-Pile 세트 생성 시작...")
-             (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc*)
+             (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc* boundary-orient)
              
              (princ "\n========================================")
              (princ "\n작업 완료!")
@@ -858,7 +862,7 @@
 ;;; 경계선에 H-Pile 세트 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt boundary-orient)
+(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc boundary-orient / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt)
   ;; 가장 긴 세그먼트 찾기
   (setq longest-seg (get-longest-segment boundary-ent))
   
@@ -876,10 +880,8 @@
       (princ (strcat "\n가장 긴 세그먼트 길이: " (rtos (distance pt1 pt2) 2 2) "mm"))
       (princ (strcat "\n경계선 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
       
-      ;; 경계선 방향 계산 (TSP-debug.lsp의 determine-boundary-orientation 간소화 버전)
-      ;; 기본값: CCW(1) - 대부분의 경우 외부가 왼쪽
-      (setq boundary-orient 1)
-      (princ "\n[INFO] boundary-orient 기본값 사용: CCW(1)")
+      ;; 전달받은 boundary-orient 사용
+      (princ (strcat "\n[INFO] 전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
       
       ;; H-Pile 높이 파싱 (하단을 경계선에 맞추기 위한 오프셋 계산)
       (if (= hpile-spec "User-defined")
@@ -1508,6 +1510,127 @@
   )
   
   positions
+)
+
+;;; ----------------------------------------------------------------------
+;;; 방향 판별 함수 (간소화 버전)
+;;; ----------------------------------------------------------------------
+
+;; 엔티티에서 꼭지점 추출
+(defun extract-vertices-simple (ent / ent-data vertices item first-pt last-pt)
+  (setq ent-data (entget ent))
+  (setq vertices '())
+  
+  ;; DXF 코드 10 = 꼭지점 좌표
+  (foreach item ent-data
+    (if (= (car item) 10)
+      (setq vertices (append vertices (list (cdr item))))
+    )
+  )
+  
+  ;; 닫힌 폴리라인: 첫 번째와 마지막이 같으면 마지막 제거
+  (if (and (> (length vertices) 1)
+           (setq first-pt (car vertices))
+           (setq last-pt (last vertices))
+           (equal first-pt last-pt 0.01))
+    (setq vertices (reverse (cdr (reverse vertices))))
+  )
+  
+  vertices
+)
+
+;; 폴리라인 폐합 여부 판별
+(defun is-closed-polyline-simple (ent / ent-data closed-flag vertices first-pt last-pt)
+  (setq ent-data (entget ent))
+  
+  ;; DXF 코드 70의 bit 0 확인
+  (setq closed-flag (cdr (assoc 70 ent-data)))
+  (if (and closed-flag (= 1 (logand 1 closed-flag)))
+    T
+    (progn
+      (setq vertices '())
+      (foreach item ent-data
+        (if (= (car item) 10)
+          (setq vertices (append vertices (list (cdr item))))
+        )
+      )
+      (if (>= (length vertices) 2)
+        (progn
+          (setq first-pt (car vertices))
+          (setq last-pt (last vertices))
+          (equal first-pt last-pt 0.1)
+        )
+        nil
+      )
+    )
+  )
+)
+
+;; 다각형 방향 판단 (Shoelace 공식)
+;; 반환값: 1 = CCW (반시계방향), -1 = CW (시계방향)
+(defun get-polygon-orientation-simple (vertices / signed-area i n x1 y1 x2 y2)
+  (setq signed-area 0.0)
+  (setq n (length vertices))
+  (setq i 0)
+  
+  (while (< i n)
+    (setq x1 (car (nth i vertices)))
+    (setq y1 (cadr (nth i vertices)))
+    (setq x2 (car (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    (setq y2 (cadr (nth (if (= i (1- n)) 0 (1+ i)) vertices)))
+    
+    (setq signed-area (+ signed-area (* (- x1 x2) (+ y1 y2))))
+    (setq i (1+ i))
+  )
+  
+  (if (> signed-area 0) 1 -1)
+)
+
+;; 경계선 방향 판별 (간소화 버전)
+(defun determine-boundary-orientation-simple (boundary-ent / vertices pt1 pt2 user-pt cross-z boundary-orient)
+  (princ "\n[방향 판별] 경계선 타입 및 방향 판단...")
+  (setq vertices (extract-vertices-simple boundary-ent))
+  
+  (if (is-closed-polyline-simple boundary-ent)
+    (progn
+      (princ "\n- 폐합 다각형 감지")
+      (setq boundary-orient (get-polygon-orientation-simple vertices))
+      (if (= boundary-orient 1)
+        (princ "\n- CCW(반시계): 왼쪽이 바깥")
+        (princ "\n- CW(시계): 오른쪽이 바깥")
+      )
+      boundary-orient
+    )
+    (progn
+      (princ "\n- 열린 경계선 감지")
+      (princ "\n경계선 바깥쪽(파일 설치 위치)을 클릭하세요: ")
+      (setq user-pt (getpoint))
+      
+      (setq pt1 (car vertices))
+      (setq pt2 (cadr vertices))
+      
+      ;; 외적 공식으로 좌/우 판별
+      (setq cross-z 
+        (- (* (- (car pt2) (car pt1)) 
+              (- (cadr user-pt) (cadr pt1)))
+           (* (- (cadr pt2) (cadr pt1)) 
+              (- (car user-pt) (car pt1))))
+      )
+      
+      (if (> cross-z 0)
+        (progn
+          (setq boundary-orient 1)
+          (princ "\n- 사용자 선택: 진행방향의 왼쪽 (바깥쪽)")
+        )
+        (progn
+          (setq boundary-orient -1)
+          (princ "\n- 사용자 선택: 진행방향의 오른쪽 (바깥쪽)")
+        )
+      )
+      
+      boundary-orient
+    )
+  )
 )
 
 ;;; ----------------------------------------------------------------------
