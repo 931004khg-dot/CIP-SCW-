@@ -2104,29 +2104,125 @@
 )
 
 ;;; ----------------------------------------------------------------------
-;;; 경계선 따라 배치 함수
+;;; 유틸리티 함수: 모서리 H-Pile 충돌 제한선 계산
+;;; ----------------------------------------------------------------------
+
+;; H-Pile의 모서리가 경계선 진행방향으로 얼마나 튀어나왔는지 계산하는 함수
+(defun get-hpile-limit-offset (center-pt h b prev-seg-angle next-seg-angle seg-angle is-start / 
+  half-h half-b rotation local-pts local-pt lx ly wx wy pts pt dx dy proj max-proj min-proj
+  angle-diff bisector-angle turn-direction)
+  
+  (debug-log "  === get-hpile-limit-offset 시작 ===")
+  (debug-log (strcat "    중심점: (" (rtos (car center-pt) 2 2) ", " (rtos (cadr center-pt) 2 2) ")"))
+  (debug-log (strcat "    H-Pile 규격: H=" (rtos h 2 0) " B=" (rtos b 2 0)))
+  (debug-log (strcat "    이전 세그먼트 각도: " (rtos (* prev-seg-angle (/ 180.0 pi)) 2 1) "°"))
+  (debug-log (strcat "    다음 세그먼트 각도: " (rtos (* next-seg-angle (/ 180.0 pi)) 2 1) "°"))
+  (debug-log (strcat "    현재 세그먼트 각도: " (rtos (* seg-angle (/ 180.0 pi)) 2 1) "°"))
+  (debug-log (strcat "    계산 방향: " (if is-start "시작점(Max)" "끝점(Min)")))
+  
+  ;; 1. 모서리 H-Pile 회전각 계산 (Bisector 기반)
+  (setq angle-diff (- next-seg-angle prev-seg-angle))
+  
+  ;; 각도 정규화 (-π ~ π)
+  (if (> angle-diff pi) (setq angle-diff (- angle-diff (* 2 pi))))
+  (if (< angle-diff (- pi)) (setq angle-diff (+ angle-diff (* 2 pi))))
+  
+  (setq turn-direction (if (>= angle-diff 0) 1 -1))
+  (setq bisector-angle (+ prev-seg-angle (/ angle-diff 2.0)))
+  (setq rotation (+ bisector-angle (* turn-direction (/ pi 2.0))))
+  
+  (debug-log (strcat "    각도 차이: " (rtos (* angle-diff (/ 180.0 pi)) 2 1) "°"))
+  (debug-log (strcat "    회전 방향: " (if (= turn-direction 1) "CCW" "CW")))
+  (debug-log (strcat "    이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "°"))
+  (debug-log (strcat "    H-Pile 회전각: " (rtos (* rotation (/ 180.0 pi)) 2 1) "°"))
+  
+  ;; 2. H-Pile 꼭지점 계산 (로컬 좌표계 → 회전 → 월드 좌표계)
+  (setq half-h (/ h 2.0))
+  (setq half-b (/ b 2.0))
+  
+  ;; 로컬 좌표계에서 4개 꼭지점 정의
+  (setq local-pts (list
+    (list half-h half-b)         ; 우상단
+    (list half-h (- half-b))     ; 우하단
+    (list (- half-h) (- half-b)) ; 좌하단
+    (list (- half-h) half-b)     ; 좌상단
+  ))
+  
+  (debug-log "    로컬 꼭지점 계산 완료")
+  
+  ;; 회전 변환 후 월드 좌표계로 변환
+  (setq pts '())
+  (foreach local-pt local-pts
+    (setq lx (car local-pt))
+    (setq ly (cadr local-pt))
+    ;; 회전 행렬 적용: [wx, wy] = [cos -sin; sin cos] * [lx; ly]
+    (setq wx (+ (car center-pt) (- (* lx (cos rotation)) (* ly (sin rotation)))))
+    (setq wy (+ (cadr center-pt) (+ (* lx (sin rotation)) (* ly (cos rotation))))))
+    (setq pts (append pts (list (list wx wy 0.0))))
+  )
+  
+  (debug-log (strcat "    월드 꼭지점 개수: " (itoa (length pts))))
+  
+  ;; 3. 세그먼트 방향으로 투영 (점 → 직선 투영)
+  ;; 투영 거리 = (점 - 중심) · (세그먼트 단위벡터)
+  ;;           = dx * cos(seg-angle) + dy * sin(seg-angle)
+  (setq max-proj -1e99)
+  (setq min-proj 1e99)
+  
+  (foreach pt pts
+    (setq dx (- (car pt) (car center-pt)))
+    (setq dy (- (cadr pt) (cadr center-pt)))
+    (setq proj (+ (* dx (cos seg-angle)) (* dy (sin seg-angle))))
+    
+    (if (> proj max-proj) (setq max-proj proj))
+    (if (< proj min-proj) (setq min-proj proj))
+  )
+  
+  (debug-log (strcat "    최대 투영 거리(Max): " (rtos max-proj 2 2) "mm"))
+  (debug-log (strcat "    최소 투영 거리(Min): " (rtos min-proj 2 2) "mm"))
+  
+  ;; 4. 시작점/끝점에 따라 반환
+  (if is-start
+    (progn
+      (debug-log (strcat "    → 반환값(Start Limit): " (rtos max-proj 2 2) "mm"))
+      max-proj
+    )
+    (progn
+      (debug-log (strcat "    → 반환값(End Limit): " (rtos min-proj 2 2) "mm"))
+      min-proj
+    )
+  )
+)
+
+;;; ----------------------------------------------------------------------
+;;; 경계선 따라 배치 함수 (Option A: 유효 구간 계산 방식)
 ;;; ----------------------------------------------------------------------
 
 ;; 경계선을 따라 H-Pile+토류판 배치 (방향 전달받음)
 (defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness boundary-orient / 
+  ;; 기존 변수
   h b tw tf hpile-values hpile-block timber-width half-h 
-  timber-offset hpile-offset boundary-vla offset-obj offset-vla exploded-lines
-  line-ent line-data pt1 pt2 mid-pt seg-angle angle-deg original-area offset-area
-  last-before first-new current-ent ent-data delete-count
-  seg-length ctc-mm half-length num-left num-right point-list i dist new-pt
-  dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
-  boundary-copy last-before-boundary first-new-boundary boundary-lines
-  offset-sign orig-vertices seg-idx n-verts
-  outward-normal insert-pt hpile-positions hpile-pt hpile-rotation
-  corner-gap min-dist-to-corner required-space adjusted-width timber-data 
-  timber-pt current-width timber-pt-offset is-closed max-segments)
+  timber-offset hpile-offset orig-vertices boundary-data item
+  is-closed max-segments seg-idx n-verts pt1 pt2 seg-length seg-angle
+  mid-pt outward-normal hpile-rotation corner-gap ctc-mm
+  i num-left num-right
+  insert-pt timber-raw-start timber-raw-end timber-ranges range
+  current-start-dist current-end-dist safe-start safe-end 
+  final-center final-width timber-pt timber-pt-offset final-center-dist
+  hpile-positions dist new-pt timber-raw-center timber-count
+  ;; 새로 추가된 변수 (Option A)
+  corner-hpiles prev-idx next-idx prev-vertex curr-vertex next-vertex
+  angle1 angle2 angle-diff bisector-angle turn-direction corner-rotation
+  start-corner-info end-corner-info end-corner-idx prev-angle next-angle
+  start-limit end-limit num-vertices corner-pair corner-idx corner-info
+  corner-vertex corner-count hpile-pt dist-from-pt1 dist-from-pt2 half-length)
   
-  (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
+  (princ "\n\n")
+  (princ "========================================\n")
+  (princ "  TSP 배치 시작 (Option A: 유효 구간 계산)\n")
+  (princ "========================================\n")
+  (debug-log "=== place-hpile-timber-along-boundary 시작 (Option A) ===")
   (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
-  
-  ;; 토류판은 외부 법선(outward-normal) 방향으로 배치
-  ;; 외부 법선이 이미 바깥쪽을 가리키므로 항상 양수 오프셋
-  (debug-log "토류판: 외부 법선 방향으로 배치 (양수 오프셋)")
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -2161,18 +2257,18 @@
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
   (debug-log (strcat "토류판 너비: " (rtos timber-width 2 2) "mm"))
   
-  ;; 모서리 여유 공간(corner-gap) 계산
-  ;; corner-gap = (max h b) / 2.0 + 50.0
-  (setq corner-gap (+ (/ (max h b) 2.0) 50.0))
-  (debug-log (strcat "모서리 여유 공간(corner-gap): " (rtos corner-gap 2 2) "mm"))
+  ;; 모서리 여유 공간 (안전율 50mm)
+  (setq corner-gap 50.0)
+  (princ (strcat "\n모서리 안전 여유: " (rtos corner-gap 2 0) "mm"))
+  (debug-log (strcat "모서리 안전 여유(corner-gap): " (rtos corner-gap 2 2) "mm"))
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
   (debug-log (strcat "H-Pile 블록: " hpile-block))
   
-  ;; ===== 3단계: 원본 경계선 기준으로 토류판 + H-Pile 배치 =====
-  (princ "\n\n[3단계] 원본 경계선 기준으로 토류판 + H-Pile 배치 (X좌표 일치)...")
-  (debug-log "=== 3.5단계: 원본 경계선 기준 H-Pile 배치 시작 ===")
+  ;; ===== 1단계: 모서리 H-Pile 정보 사전 계산 =====
+  (princ "\n\n[1단계] 모서리 H-Pile 정보 사전 계산...")
+  (debug-log "=== 1단계: 모서리 H-Pile 정보 사전 계산 시작 ===")
   
   ;; 원본 경계선의 세그먼트를 기준으로 H-Pile 배치
   (setq boundary-data (entget boundary-ent))
@@ -2194,6 +2290,83 @@
   ;; 폐합 여부 확인
   (setq is-closed (is-closed-polyline boundary-ent))
   (debug-log (strcat "경계선 타입: " (if is-closed "폐합(Closed)" "열림(Open)")))
+  
+  ;; ===== 1단계: 모서리 H-Pile 정보 사전 계산 =====
+  (setq corner-hpiles '())
+  (setq num-vertices (length orig-vertices))
+  (setq i 0)
+  
+  (princ (strcat "\n모서리 H-Pile 후보: " (itoa num-vertices) "개 꼭지점 검사 중..."))
+  
+  (while (< i num-vertices)
+    ;; 열린 폴리라인: 첫/마지막 꼭지점 제외
+    ;; 닫힌 폴리라인: 모든 꼭지점 포함
+    (if (or is-closed (and (> i 0) (< i (- num-vertices 1))))
+      (progn
+        (debug-log (strcat "\n  [모서리 " (itoa i) "] 계산 시작"))
+        
+        ;; 이전/다음 꼭지점 인덱스
+        (if is-closed
+          (progn
+            (setq prev-idx (if (= i 0) (- num-vertices 1) (- i 1)))
+            (setq next-idx (if (= i (- num-vertices 1)) 0 (+ i 1)))
+          )
+          (progn
+            (setq prev-idx (- i 1))
+            (setq next-idx (+ i 1))
+          )
+        )
+        
+        (setq prev-vertex (nth prev-idx orig-vertices))
+        (setq curr-vertex (nth i orig-vertices))
+        (setq next-vertex (nth next-idx orig-vertices))
+        
+        (debug-log (strcat "    이전 꼭지점 인덱스: " (itoa prev-idx)))
+        (debug-log (strcat "    현재 꼭지점 인덱스: " (itoa i)))
+        (debug-log (strcat "    다음 꼭지점 인덱스: " (itoa next-idx)))
+        
+        ;; 각도 계산
+        (setq angle1 (angle prev-vertex curr-vertex))
+        (setq angle2 (angle curr-vertex next-vertex))
+        
+        (debug-log (strcat "    이전 세그먼트 각도: " (rtos (* angle1 (/ 180.0 pi)) 2 1) "°"))
+        (debug-log (strcat "    다음 세그먼트 각도: " (rtos (* angle2 (/ 180.0 pi)) 2 1) "°"))
+        
+        ;; Bisector 기반 회전각 계산
+        (setq angle-diff (- angle2 angle1))
+        
+        ;; 각도 정규화 (-π ~ π)
+        (if (> angle-diff pi) (setq angle-diff (- angle-diff (* 2 pi))))
+        (if (< angle-diff (- pi)) (setq angle-diff (+ angle-diff (* 2 pi))))
+        
+        (setq turn-direction (if (>= angle-diff 0) 1 -1))
+        (setq bisector-angle (+ angle1 (/ angle-diff 2.0)))
+        (setq corner-rotation (+ bisector-angle (* turn-direction (/ pi 2.0))))
+        
+        (debug-log (strcat "    각도 차이: " (rtos (* angle-diff (/ 180.0 pi)) 2 1) "°"))
+        (debug-log (strcat "    회전 방향: " (if (= turn-direction 1) "CCW(+1)" "CW(-1)")))
+        (debug-log (strcat "    이등분선 각도: " (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "°"))
+        (debug-log (strcat "    H-Pile 회전각: " (rtos (* corner-rotation (/ 180.0 pi)) 2 1) "°"))
+        
+        ;; 저장: (index . (position rotation prev-angle next-angle))
+        (setq corner-hpiles 
+          (append corner-hpiles 
+            (list (cons i (list curr-vertex corner-rotation angle1 angle2)))
+          )
+        )
+        
+        (princ (strcat "\n  모서리 " (itoa i) " H-Pile: 회전각=" (rtos (* corner-rotation (/ 180.0 pi)) 2 1) "°"))
+      )
+    )
+    (setq i (1+ i))
+  )
+  
+  (princ (strcat "\n모서리 H-Pile 정보 저장 완료: " (itoa (length corner-hpiles)) "개\n"))
+  (debug-log (strcat "모서리 H-Pile 총 개수: " (itoa (length corner-hpiles))))
+  
+  ;; ===== 2단계: 세그먼트 루프 - 토류판 + 직선 H-Pile 배치 =====
+  (princ "\n\n[2단계] 세그먼트별 토류판 + H-Pile 배치 (유효 구간 계산)...")
+  (debug-log "=== 2단계: 세그먼트 루프 시작 ===")
   
   ;; 각 세그먼트별로 H-Pile 배치
   (setq seg-idx 0)
@@ -2234,125 +2407,158 @@
     ;; 결론: outward-normal = seg-angle + (boundary-orient * 90°)
     (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
-    ;; ===== 토류판 배치 (원본 선 위에서 계산 후 법선 방향 이동) =====
-    ;; 토류판 위치: 0, CTC, 2*CTC, 3*CTC... (정확히 H-Pile 사이 중심)
-    ;; 각 토류판은 (위치 . 너비) 형식으로 저장
-    (setq timber-positions '())
+    (princ (strcat "\n\n--- 세그먼트 " (itoa seg-idx) " ---"))
+    (debug-log (strcat "\n=== 세그먼트 " (itoa seg-idx) " 처리 시작 ==="))
+    (debug-log (strcat "  길이: " (rtos seg-length 2 2) "mm"))
+    (debug-log (strcat "  각도: " (rtos (* seg-angle (/ 180.0 pi)) 2 1) "°"))
+    (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
     
-    ;; 왼쪽 방향 (음수)
-    (setq i num-left)
-    (while (>= i 1)
-      (setq dist (* i ctc-mm -1.0))
-      (setq new-pt (polar mid-pt seg-angle dist))
-      
-      ;; 범위 체크
-      (setq dist-from-pt1 (distance pt1 new-pt))
-      (setq dist-from-pt2 (distance pt2 new-pt))
-      
-      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
-        (progn
-          ;; 동적 너비 계산: 모서리와의 충돌 검사
-          (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
-          (setq required-space (+ (/ timber-width 2.0) corner-gap))
-          
-          (if (< min-dist-to-corner required-space)
-            ;; 모서리에 너무 가까움 → 너비 축소
-            (progn
-              (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
-              (if (>= adjusted-width 100)
-                ;; 최소 너비(100mm) 이상이면 축소된 너비로 추가
-                (setq timber-positions (append timber-positions (list (cons new-pt adjusted-width))))
-                ;; 100mm 미만이면 토류판 생략
-                (princ (strcat "\n  [경고] 토류판 생략 (모서리 충돌): 위치=" (rtos dist 2 0) "mm, 조정너비=" (rtos adjusted-width 2 0) "mm"))
-              )
-            )
-            ;; 충분한 공간 있음 → 기본 너비 사용
-            (setq timber-positions (append timber-positions (list (cons new-pt timber-width))))
-          )
-        )
+    ;; ★★★ 충돌 제한선(Limit) 계산 ★★★
+    ;; pt1 (시작점) 모서리 H-Pile 정보 찾기
+    (setq start-corner-info nil)
+    (foreach corner-pair corner-hpiles
+      (if (= (car corner-pair) seg-idx)
+        (setq start-corner-info (cdr corner-pair))
       )
-      
-      (setq i (1- i))
     )
     
-    ;; 중점 추가 (0 CTC)
-    (setq dist-from-pt1 (distance pt1 mid-pt))
-    (setq dist-from-pt2 (distance pt2 mid-pt))
-    (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
-    (setq required-space (+ (/ timber-width 2.0) corner-gap))
+    ;; pt2 (끝점) 모서리 H-Pile 정보 찾기
+    (setq end-corner-idx (if is-closed (rem (+ seg-idx 1) n-verts) (+ seg-idx 1)))
+    (setq end-corner-info nil)
+    (foreach corner-pair corner-hpiles
+      (if (= (car corner-pair) end-corner-idx)
+        (setq end-corner-info (cdr corner-pair))
+      )
+    )
     
-    (if (< min-dist-to-corner required-space)
+    ;; Start Limit 계산
+    (if start-corner-info
       (progn
-        (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
-        (if (>= adjusted-width 100)
-          (setq timber-positions (append timber-positions (list (cons mid-pt adjusted-width))))
-          (princ (strcat "\n  [경고] 중점 토류판 생략 (모서리 충돌): 조정너비=" (rtos adjusted-width 2 0) "mm"))
-        )
+        (debug-log "  시작점 모서리 H-Pile 발견 - 충돌 제한선 계산 중...")
+        (setq prev-angle (nth 2 start-corner-info))
+        (setq next-angle (nth 3 start-corner-info))
+        (setq start-limit (get-hpile-limit-offset pt1 h b prev-angle next-angle seg-angle T))
+        (setq start-limit (+ start-limit corner-gap))
+        (debug-log (strcat "  Start Limit (pt1 기준): " (rtos start-limit 2 2) "mm (안전 여유 포함)"))
       )
-      (setq timber-positions (append timber-positions (list (cons mid-pt timber-width))))
+      (progn
+        (setq start-limit 0.0)
+        (debug-log "  시작점 모서리 H-Pile 없음 → Start Limit = 0")
+      )
     )
     
-    ;; 오른쪽 방향 (양수)
-    (setq i 1)
-    (while (<= i num-right)
-      (setq dist (* i ctc-mm))
-      (setq new-pt (polar mid-pt seg-angle dist))
-      
-      ;; 범위 체크
-      (setq dist-from-pt1 (distance pt1 new-pt))
-      (setq dist-from-pt2 (distance pt2 new-pt))
-      
-      (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
-        (progn
-          ;; 동적 너비 계산: 모서리와의 충돌 검사
-          (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
-          (setq required-space (+ (/ timber-width 2.0) corner-gap))
+    ;; End Limit 계산
+    (if end-corner-info
+      (progn
+        (debug-log "  끝점 모서리 H-Pile 발견 - 충돌 제한선 계산 중...")
+        (setq prev-angle (nth 2 end-corner-info))
+        (setq next-angle (nth 3 end-corner-info))
+        (setq end-limit (+ seg-length (get-hpile-limit-offset pt2 h b prev-angle next-angle seg-angle nil)))
+        (setq end-limit (- end-limit corner-gap))
+        (debug-log (strcat "  End Limit (pt1 기준): " (rtos end-limit 2 2) "mm (안전 여유 포함)"))
+      )
+      (progn
+        (setq end-limit seg-length)
+        (debug-log (strcat "  끝점 모서리 H-Pile 없음 → End Limit = " (rtos seg-length 2 2)))
+      )
+    )
+    
+    (princ (strcat "\n  유효 구간: [" (rtos start-limit 2 1) " ~ " (rtos end-limit 2 1) "]mm"))
+    
+    ;; 유효 구간 검증
+    (if (> start-limit end-limit)
+      (progn
+        (princ (strcat "\n  [경고] 세그먼트 " (itoa seg-idx) " 유효 구간 없음 (너무 짧음) - 토류판 생략"))
+        (debug-log "[경고] Start Limit > End Limit → 토류판 배치 불가")
+      )
+      (progn
+        ;; ===== 토류판 배치 계산 (Range Clipping) =====
+        (debug-log "  토류판 배치 계산 시작...")
+        
+        ;; 배치할 토류판 리스트 (StartDist . EndDist) 쌍으로 저장
+        (setq timber-ranges '())
+        
+        ;; 중심점 기준 왼쪽 (음수 방향)
+        (setq i num-left)
+        (while (>= i 1)
+          (setq dist (* i ctc-mm -1.0))
+          ;; pt1을 0으로 보는 거리 좌표계
+          (setq timber-raw-center (+ (/ seg-length 2.0) dist))
+          (setq timber-raw-start (- timber-raw-center (/ timber-width 2.0)))
+          (setq timber-raw-end (+ timber-raw-center (/ timber-width 2.0)))
           
-          (if (< min-dist-to-corner required-space)
-            ;; 모서리에 너무 가까움 → 너비 축소
+          (setq timber-ranges (append timber-ranges (list (cons timber-raw-start timber-raw-end))))
+          (setq i (1- i))
+        )
+        
+        ;; 중심점 (0 CTC)
+        (setq timber-raw-center (/ seg-length 2.0))
+        (setq timber-raw-start (- timber-raw-center (/ timber-width 2.0)))
+        (setq timber-raw-end (+ timber-raw-center (/ timber-width 2.0)))
+        (setq timber-ranges (append timber-ranges (list (cons timber-raw-start timber-raw-end))))
+        
+        ;; 중심점 기준 오른쪽 (양수 방향)
+        (setq i 1)
+        (while (<= i num-right)
+          (setq dist (* i ctc-mm))
+          (setq timber-raw-center (+ (/ seg-length 2.0) dist))
+          (setq timber-raw-start (- timber-raw-center (/ timber-width 2.0)))
+          (setq timber-raw-end (+ timber-raw-center (/ timber-width 2.0)))
+          
+          (setq timber-ranges (append timber-ranges (list (cons timber-raw-start timber-raw-end))))
+          (setq i (1+ i))
+        )
+        
+        (debug-log (strcat "  원본 토류판 후보: " (itoa (length timber-ranges)) "개"))
+        
+        ;; ===== 토류판 생성 (Clipping 적용) =====
+        (setq timber-count 0)
+        (foreach range timber-ranges
+          (setq current-start-dist (car range))
+          (setq current-end-dist (cdr range))
+          
+          ;; 1. 유효 구간 계산 (Clipping)
+          ;; 시작점은 Start Limit보다 커야 함
+          (setq safe-start (max current-start-dist start-limit))
+          ;; 끝점은 End Limit보다 작아야 함
+          (setq safe-end (min current-end-dist end-limit))
+          
+          ;; 2. 유효한 토류판인가? (길이가 최소 100mm 이상)
+          (if (> (- safe-end safe-start) 100.0)
             (progn
-              (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
-              (if (>= adjusted-width 100)
-                ;; 최소 너비(100mm) 이상이면 축소된 너비로 추가
-                (setq timber-positions (append timber-positions (list (cons new-pt adjusted-width))))
-                ;; 100mm 미만이면 토류판 생략
-                (princ (strcat "\n  [경고] 토류판 생략 (모서리 충돌): 위치=" (rtos dist 2 0) "mm, 조정너비=" (rtos adjusted-width 2 0) "mm"))
-              )
+              ;; 3. 새로운 중심과 너비 계산
+              (setq final-width (- safe-end safe-start))
+              (setq final-center-dist (/ (+ safe-start safe-end) 2.0))
+              
+              (debug-log (strcat "    토류판 [" (rtos current-start-dist 2 1) " ~ " (rtos current-end-dist 2 1) 
+                                 "] → Clipping [" (rtos safe-start 2 1) " ~ " (rtos safe-end 2 1) 
+                                 "] 너비=" (rtos final-width 2 1) "mm"))
+              
+              ;; 4. 좌표 변환 (거리 → 실제 좌표)
+              ;; pt1에서 seg-angle 방향으로 final-center-dist 만큼 이동
+              (setq timber-pt (polar pt1 seg-angle final-center-dist))
+              ;; 그 후 외부 법선 방향으로 timber-offset 만큼 이동 (음수 = 바깥쪽)
+              (setq timber-pt-offset (polar timber-pt outward-normal (- timber-offset)))
+              
+              ;; 5. 객체 생성
+              ;; POINT 생성 (디버그용)
+              (entmake (list '(0 . "POINT") (cons 10 timber-pt-offset) '(8 . "_토류판(timber)")))
+              
+              ;; 토류판 폴리라인 생성
+              (create-timber-panel-object timber-pt-offset final-width timber-thickness seg-angle)
+              
+              (setq timber-count (1+ timber-count))
             )
-            ;; 충분한 공간 있음 → 기본 너비 사용
-            (setq timber-positions (append timber-positions (list (cons new-pt timber-width))))
+            (progn
+              (debug-log (strcat "    토류판 생략 [" (rtos current-start-dist 2 1) " ~ " (rtos current-end-dist 2 1) 
+                                 "] → Clipped [" (rtos safe-start 2 1) " ~ " (rtos safe-end 2 1) 
+                                 "] 너비=" (rtos (- safe-end safe-start) 2 1) "mm (최소 100mm 미만)"))
+            )
           )
         )
+        
+        (princ (strcat "\n  토류판 생성: " (itoa timber-count) "개"))
       )
-      
-      (setq i (1+ i))
-    )
-    
-    (if (> (length timber-positions) 0)
-      (princ (strcat "\n  세그먼트" (itoa seg-idx) " 토류판: " (itoa (length timber-positions)) "개"))
-    )
-    
-    ;; 각 토류판 위치에 대해 법선 방향으로 timber-offset만큼 이동 후 배치
-    ;; timber-positions는 이제 (위치 . 너비) cons 쌍의 리스트
-    (foreach timber-data timber-positions
-      (setq timber-pt (car timber-data))
-      (setq current-width (cdr timber-data))
-      
-      ;; 원본 선 위의 점 → 외부 법선 방향으로 timber-offset만큼 이동
-      ;; 오프셋을 음수로 하여 실제 바깥쪽으로 이동
-      (setq timber-pt-offset (polar timber-pt outward-normal (- timber-offset)))
-      
-      ;; POINT 생성 (토류판 중심 = 오프셋된 위치)
-      (entmake
-        (list
-          '(0 . "POINT")
-          (cons 10 timber-pt-offset)
-          '(8 . "_토류판(timber)")
-        )
-      )
-      
-      ;; 토류판 객체 생성 (회전각 = seg-angle, 동적 너비 사용)
-      (create-timber-panel-object timber-pt-offset current-width timber-thickness seg-angle)
     )
     
     ;; ===== H-Pile 배치 (원본 선 위, CTC/2 간격) =====
@@ -2433,65 +2639,62 @@
     (setq seg-idx (1+ seg-idx))
   )
   
-  (princ "\n직선 H-Pile 배치 완료!")
+  (princ "\n\n직선 구간 배치 완료!")
+  (debug-log "=== 2단계 완료: 모든 세그먼트 처리 완료 ===")
   
-  ;; ===== 4단계: 모서리(꼭지점)에 H-Pile 배치 =====
-  (princ "\n\n[4단계] 모서리(꼭지점)에 H-Pile 배치...")
-  (debug-log "=== 4단계: 모서리 H-Pile 배치 시작 ===")
+  ;; ===== 3단계: 모서리 H-Pile 객체 생성 =====
+  (princ "\n\n[3단계] 모서리 H-Pile 객체 생성...")
+  (debug-log "=== 3단계: 모서리 H-Pile 객체 생성 시작 ===")
   
-  ;; LWPOLYLINE에서 직접 꼭지점 추출
-  (setq boundary-data (entget boundary-ent))
-  (setq vertices '())
-  (foreach item boundary-data
-    (if (= (car item) 10)
-      (setq vertices (append vertices (list (cdr item))))
-    )
-  )
-  
-  ;; 닫힌 폴리라인: 첫 번째와 마지막 꼭지점이 같으면 마지막 제거
-  (if (and (> (length vertices) 1)
-           (equal (car vertices) (last vertices) 0.01))
-    (setq vertices (reverse (cdr (reverse vertices))))
-  )
-  
-  (princ (strcat "\n  경계선 꼭지점 개수: " (itoa (length vertices))))
-  (princ (strcat "\n  경계선 타입: " (if is-closed "폐합" "열림")))
-  
-  ;; 각 꼭지점에 H-Pile 배치 (이전/현재/다음 꼭지점 사용)
-  (setq i 0)
-  (setq num-vertices (length vertices))
-  (while (< i num-vertices)
-    ;; 열린 선: 첫 점과 마지막 점은 모서리가 아니므로 스킵
-    (if (or is-closed
-            (and (> i 0) (< i (- num-vertices 1))))
+  (setq corner-count 0)
+  (foreach corner-pair corner-hpiles
+    (setq corner-idx (car corner-pair))
+    (setq corner-info (cdr corner-pair))
+    (setq corner-vertex (nth 0 corner-info))
+    (setq corner-rotation (nth 1 corner-info))
+    
+    (debug-log (strcat "  모서리 " (itoa corner-idx) " H-Pile 생성: 회전각=" (rtos (* corner-rotation (/ 180.0 pi)) 2 1) "°"))
+    
+    ;; place-hpile-at-corner-simple 함수 호출
+    (setq prev-angle (nth 2 corner-info))
+    (setq next-angle (nth 3 corner-info))
+    
+    ;; 이전/다음 꼭지점 계산
+    (if is-closed
       (progn
-        (if is-closed
-          (progn
-            (setq prev-vertex (nth (if (= i 0) (- num-vertices 1) (- i 1)) vertices))
-            (setq next-vertex (nth (if (= i (- num-vertices 1)) 0 (+ i 1)) vertices))
-          )
-          (progn
-            (setq prev-vertex (nth (- i 1) vertices))
-            (setq next-vertex (nth (+ i 1) vertices))
-          )
-        )
-        (setq curr-vertex (nth i vertices))
-        
-        ;; 각도 계산
-        (setq angle1 (angle prev-vertex curr-vertex))
-        (setq angle2 (angle curr-vertex next-vertex))
-        
-        ;; H-Pile 배치 (boundary-orient, prev-vertex, next-vertex 전달)
-        (place-hpile-at-corner-simple curr-vertex angle1 angle2 h b tw tf hpile-block timber-offset boundary-orient prev-vertex next-vertex)
+        (setq prev-idx (if (= corner-idx 0) (- num-vertices 1) (- corner-idx 1)))
+        (setq next-idx (if (= corner-idx (- num-vertices 1)) 0 (+ corner-idx 1)))
+      )
+      (progn
+        (setq prev-idx (- corner-idx 1))
+        (setq next-idx (+ corner-idx 1))
       )
     )
+    (setq prev-vertex (nth prev-idx orig-vertices))
+    (setq next-vertex (nth next-idx orig-vertices))
     
-    (setq i (+ i 1))
+    (place-hpile-at-corner-simple 
+      corner-vertex 
+      prev-angle 
+      next-angle 
+      h b tw tf 
+      hpile-block 
+      timber-offset 
+      boundary-orient 
+      prev-vertex 
+      next-vertex
+    )
+    
+    (setq corner-count (1+ corner-count))
   )
   
-  (princ "\n모서리 H-Pile 배치 완료!")
+  (princ (strcat "\n모서리 H-Pile 생성 완료: " (itoa corner-count) "개"))
+  (debug-log (strcat "=== 3단계 완료: 모서리 H-Pile " (itoa corner-count) "개 생성 ==="))
   
-  (princ "\n\n작업 완료!")
+  (princ "\n\n========================================")
+  (princ "\n  TSP 배치 완료!")
+  (princ "\n========================================\n")
+  (debug-log "=== place-hpile-timber-along-boundary 완료 ===")
 )
 
 ;; 경계선 방향 판단 (CW/CCW)
