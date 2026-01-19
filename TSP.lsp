@@ -2405,10 +2405,25 @@
     (setq num-right (fix (/ half-length ctc-mm)))
     
     ;; 외부 법선 방향 계산 (원본 경계선 기준)
-    ;; CCW(1): 진행방향 왼쪽(+90°) = 바깥쪽
-    ;; CW(-1): 진행방향 오른쪽(-90°) = 바깥쪽
-    ;; 결론: outward-normal = seg-angle + (boundary-orient * 90°)
-    (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
+    ;; 폐합 다각형:
+    ;;   - CCW(1): 진행방향 왼쪽(+90°) = 바깥쪽
+    ;;   - CW(-1): 진행방향 오른쪽(-90°) = 바깥쪽
+    ;; 열린 폴리라인:
+    ;;   - 사용자 클릭 방향 = 바깥쪽
+    ;;   - 하지만 boundary-orient는 "왼쪽(1)/오른쪽(-1)"을 의미
+    ;;   - 따라서 열린선에서는 방향을 반전시켜야 함!
+    
+    ;; 해결: 열린선에서는 boundary-orient를 반전
+    (if is-closed
+      ;; 폐합선: 그대로 사용
+      (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
+      ;; 열린선: 반전 사용 (왼쪽 클릭이 실제로 바깥쪽이므로 양수 오프셋 필요)
+      (setq outward-normal (+ seg-angle (* (- boundary-orient) (/ pi 2.0))))
+    )
+    
+    (debug-log (strcat "  경계선 타입: " (if is-closed "폐합(Closed)" "열림(Open)")))
+    (debug-log (strcat "  boundary-orient 원본값: " (if (= boundary-orient 1) "1(왼쪽)" "-1(오른쪽)")))
+    (debug-log (strcat "  외부 법선 계산에 사용된 방향: " (if is-closed "원본" "반전")))
     
     (princ (strcat "\n\n--- 세그먼트 " (itoa seg-idx) " ---"))
     (debug-log (strcat "\n=== 세그먼트 " (itoa seg-idx) " 처리 시작 ==="))
