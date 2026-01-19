@@ -687,10 +687,10 @@
   ;;   - CCW(1): 왼쪽=안쪽 → 음수 오프셋
   ;;   - CW(-1): 오른쪽=안쪽 → 양수 오프셋
   ;; 
-  ;; 토류판: 항상 바깥쪽
-  ;;   - CCW(1): 오른쪽=바깥 → 양수 오프셋
-  ;;   - CW(-1): 왼쪽=바깥 → 음수 오프셋
-  (setq wale-offset-sign (- boundary-orient))      ; 띠장: 안쪽
+  ;; ★★★ 오프셋 부호 설정 (outward-normal이 이미 바깥쪽을 가리킴) ★★★
+  ;; 띠장: 안쪽 (outward-normal 반대 방향) → boundary-orient 그대로 사용
+  ;; 토류판: 바깥쪽 (outward-normal 방향) → 이미 place-hpile-timber-along-boundary에서 처리
+  (setq wale-offset-sign boundary-orient)           ; 띠장: 안쪽 (outward-normal 반전되었으므로)
   (setq timber-offset-sign boundary-orient)         ; 토류판: 바깥쪽
   (debug-log (strcat "띠장 오프셋 부호: " (itoa wale-offset-sign) ", 토류판 오프셋 부호: " (itoa timber-offset-sign)))
   
@@ -2405,16 +2405,17 @@
     (setq num-right (fix (/ half-length ctc-mm)))
     
     ;; 외부 법선 방향 계산
+    ;; ★★★ 중요: boundary-orient 반전 필요! ★★★
     ;; boundary-orient의 의미:
     ;;   - 폐합 다각형: Shoelace 공식으로 자동 판별
-    ;;     • CCW(1): 진행방향 왼쪽(+90°) = 바깥쪽
-    ;;     • CW(-1): 진행방향 오른쪽(-90°) = 바깥쪽
+    ;;     • CCW(1): 진행방향 왼쪽 = **안쪽** → 반전하여 오른쪽(-90°) = 바깥쪽
+    ;;     • CW(-1): 진행방향 오른쪽 = **안쪽** → 반전하여 왼쪽(+90°) = 바깥쪽
     ;;   - 열린 폴리라인: 외적(Cross Product)으로 사용자 클릭 판별
-    ;;     • 왼쪽 클릭(1): 진행방향 왼쪽(+90°) = 바깥쪽
-    ;;     • 오른쪽 클릭(-1): 진행방향 오른쪽(-90°) = 바깥쪽
+    ;;     • 왼쪽 클릭(1): 진행방향 왼쪽 = 사용자가 클릭한 쪽 → 반전하여 오른쪽(-90°) = 바깥쪽
+    ;;     • 오른쪽 클릭(-1): 진행방향 오른쪽 = 사용자가 클릭한 쪽 → 반전하여 왼쪽(+90°) = 바깥쪽
     ;; 
-    ;; 결론: 폐합/열린 모두 동일한 공식 사용!
-    (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
+    ;; 결론: boundary-orient를 반전하여 사용!
+    (setq outward-normal (+ seg-angle (* (- boundary-orient) (/ pi 2.0))))
     
     (debug-log (strcat "  경계선 타입: " (if is-closed "폐합(Closed)" "열림(Open)")))
     (debug-log (strcat "  boundary-orient 값: " (if (= boundary-orient 1) "1 (왼쪽=바깥)" "-1 (오른쪽=바깥)")))
