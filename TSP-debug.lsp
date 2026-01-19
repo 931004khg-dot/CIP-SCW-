@@ -2122,11 +2122,9 @@
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
   
-  ;; 오프셋 부호 결정
-  ;; boundary-orient: 1 = CCW (왼쪽=안쪽), -1 = CW (오른쪽=안쪽)
-  ;; 토류판: 항상 바깥쪽 = boundary-orient
-  (setq timber-offset-sign boundary-orient)
-  (debug-log (strcat "토류판 오프셋 부호: " (itoa timber-offset-sign)))
+  ;; 토류판은 외부 법선(outward-normal) 방향으로 배치
+  ;; 외부 법선이 이미 바깥쪽을 가리키므로 항상 양수 오프셋
+  (debug-log "토류판: 외부 법선 방향으로 배치 (양수 오프셋)")
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
@@ -2276,8 +2274,8 @@
     
     ;; 각 토류판 위치에 대해 법선 방향으로 timber-offset만큼 이동 후 배치
     (foreach timber-pt timber-positions
-      ;; 원본 선 위의 점 → 법선 방향으로 timber-offset만큼 이동
-      (setq timber-pt-offset (polar timber-pt outward-normal (* timber-offset timber-offset-sign)))
+      ;; 원본 선 위의 점 → 외부 법선 방향으로 timber-offset만큼 이동 (양수)
+      (setq timber-pt-offset (polar timber-pt outward-normal timber-offset))
       
       ;; POINT 생성 (토류판 중심 = 오프셋된 위치)
       (entmake
