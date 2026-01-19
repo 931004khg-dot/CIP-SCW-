@@ -2408,24 +2408,24 @@
     ;; 중요: boundary-orient 반전 필요!
     ;; boundary-orient의 의미:
     ;;   - 폐합 다각형: Shoelace 공식으로 자동 판별
-    ;;     • CCW(1): 진행방향 왼쪽 = **안쪽** → 반전하여 오른쪽(-90°) = 바깥쪽
-    ;;     • CW(-1): 진행방향 오른쪽 = **안쪽** → 반전하여 왼쪽(+90°) = 바깥쪽
+    ;;     - CCW(1): 진행방향 왼쪽 = **안쪽** -> 반전하여 오른쪽(-90deg) = 바깥쪽
+    ;;     - CW(-1): 진행방향 오른쪽 = **안쪽** -> 반전하여 왼쪽(+90deg) = 바깥쪽
     ;;   - 열린 폴리라인: 외적(Cross Product)으로 사용자 클릭 판별
-    ;;     • 왼쪽 클릭(1): 진행방향 왼쪽 = 사용자가 클릭한 쪽 → 반전하여 오른쪽(-90°) = 바깥쪽
-    ;;     • 오른쪽 클릭(-1): 진행방향 오른쪽 = 사용자가 클릭한 쪽 → 반전하여 왼쪽(+90°) = 바깥쪽
+    ;;     - 왼쪽 클릭(1): 진행방향 왼쪽 = 사용자가 클릭한 쪽 -> 반전하여 오른쪽(-90deg) = 바깥쪽
+    ;;     - 오른쪽 클릭(-1): 진행방향 오른쪽 = 사용자가 클릭한 쪽 -> 반전하여 왼쪽(+90deg) = 바깥쪽
     ;; 
     ;; 결론: boundary-orient를 반전하여 사용!
     (setq outward-normal (+ seg-angle (* (- boundary-orient) (/ pi 2.0))))
     
     (debug-log (strcat "  경계선 타입: " (if is-closed "폐합(Closed)" "열림(Open)")))
     (debug-log (strcat "  boundary-orient 값: " (if (= boundary-orient 1) "1 (왼쪽=바깥)" "-1 (오른쪽=바깥)")))
-    (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
+    (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "deg"))
     
     (princ (strcat "\n\n--- 세그먼트 " (itoa seg-idx) " ---"))
     (debug-log (strcat "\n=== 세그먼트 " (itoa seg-idx) " 처리 시작 ==="))
     (debug-log (strcat "  길이: " (rtos seg-length 2 2) "mm"))
     (debug-log (strcat "  각도: " (rtos (* seg-angle (/ 180.0 pi)) 2 1) "°"))
-    (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
+    (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "deg"))
     
     ;; 충돌 제한선(Limit) 계산
     ;; pt1 (시작점) 모서리 H-Pile 정보 찾기
