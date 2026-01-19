@@ -858,7 +858,7 @@
 ;;; 경계선에 H-Pile 세트 생성
 ;;; ----------------------------------------------------------------------
 
-(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt)
+(defun create-hpile-set-on-boundary (boundary-ent hpile-spec ctc / longest-seg pt1 pt2 mid-pt hpile-values h offset-pt boundary-orient)
   ;; 가장 긴 세그먼트 찾기
   (setq longest-seg (get-longest-segment boundary-ent))
   
@@ -875,6 +875,11 @@
       
       (princ (strcat "\n가장 긴 세그먼트 길이: " (rtos (distance pt1 pt2) 2 2) "mm"))
       (princ (strcat "\n경계선 중점: (" (rtos (car mid-pt) 2 2) ", " (rtos (cadr mid-pt) 2 2) ")"))
+      
+      ;; 경계선 방향 계산 (TSP-debug.lsp의 determine-boundary-orientation 간소화 버전)
+      ;; 기본값: CCW(1) - 대부분의 경우 외부가 왼쪽
+      (setq boundary-orient 1)
+      (princ "\n[INFO] boundary-orient 기본값 사용: CCW(1)")
       
       ;; H-Pile 높이 파싱 (하단을 경계선에 맞추기 위한 오프셋 계산)
       (if (= hpile-spec "User-defined")
@@ -895,10 +900,10 @@
           
           (princ (strcat "\nH-Pile 높이: " (rtos h 2 0) "mm"))
           (princ (strcat "\nH-Pile 중심 (조정 후): (" (rtos (car offset-pt) 2 2) ", " (rtos (cadr offset-pt) 2 2) ")"))
-          (princ (strcat "\n→ 하단 플랜지 Y 좌표: " (rtos (cadr mid-pt) 2 2) " (경계선)"))
+          (princ (strcat "\n하단 플랜지 Y 좌표: " (rtos (cadr mid-pt) 2 2) " (경계선)"))
           
-          ;; 경계선 전체에 H-Pile+토류판 배치
-          (place-hpile-timber-along-boundary boundary-ent hpile-spec ctc *tsp-timber-thickness*)
+          ;; 경계선 전체에 H-Pile+토류판 배치 (boundary-orient 전달)
+          (place-hpile-timber-along-boundary boundary-ent hpile-spec ctc *tsp-timber-thickness* boundary-orient)
         )
         (progn
           (princ "\n[ERROR] H-Pile 규격 파싱 실패!")
@@ -1315,11 +1320,17 @@
 ;;; ----------------------------------------------------------------------
 
 ;; 경계선을 따라 H-Pile+토류판 배치
-(defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness / 
+(defun place-hpile-timber-along-boundary (boundary-ent hpile-spec ctc timber-thickness boundary-orient / 
   h b tw tf hpile-values seg-list i pt1 pt2 seg seg-length seg-mid seg-angle 
   positions j pos timber-pt hpile-left hpile-right placed-hpiles dist-ok 
   timber-block hpile-block timber-width num-segments half-h adjusted-pos 
   perp-angle timber-offset hpile-offset boundary-pt)
+  
+  ;; boundary-orient 인수 추가 (TSP-debug.lsp 호환성)
+  ;; 기본값이 없으면 1 (CCW) 사용
+  (if (not boundary-orient)
+    (setq boundary-orient 1)
+  )
   
   ;; H-Pile 규격 파싱
   (if (= hpile-spec "User-defined")
