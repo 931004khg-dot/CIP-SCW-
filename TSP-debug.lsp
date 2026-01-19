@@ -2140,6 +2140,8 @@
   (setq half-h (/ h 2.0))
   (setq half-b (/ b 2.0))
   
+  (debug-log (strcat "    half-h: " (rtos half-h 2 2) "mm, half-b: " (rtos half-b 2 2) "mm"))
+  
   ;; 로컬 좌표계에서 4개 꼭지점 정의
   (setq local-pts (list
     (list half-h half-b)         ; 우상단
@@ -2148,19 +2150,20 @@
     (list (- half-h) half-b)     ; 좌상단
   ))
   
-  (debug-log "    로컬 꼭지점 계산 완료")
+  (debug-log (strcat "    로컬 꼭지점 생성: " (itoa (length local-pts)) "개"))
   
   ;; 회전 변환 후 월드 좌표계로 변환
-  (setq pts '())
+  (setq pts (list))  ; 빈 리스트로 명시적 초기화
   (foreach local-pt local-pts
     (setq lx (car local-pt))
     (setq ly (cadr local-pt))
     ;; 회전 행렬 적용: [wx, wy] = [cos -sin; sin cos] * [lx; ly]
     (setq wx (+ (car center-pt) (- (* lx (cos rotation)) (* ly (sin rotation)))))
-    (setq wy (+ (cadr center-pt) (+ (* lx (sin rotation)) (* ly (cos rotation))))))
+    (setq wy (+ (cadr center-pt) (+ (* lx (sin rotation)) (* ly (cos rotation)))))
     (setq pts (append pts (list (list wx wy 0.0))))
   )
   
+  (debug-log (strcat "    로컬 좌표 개수: " (itoa (length local-pts))))
   (debug-log (strcat "    월드 꼭지점 개수: " (itoa (length pts))))
   
   ;; 3. 세그먼트 방향으로 투영 (점 → 직선 투영)
