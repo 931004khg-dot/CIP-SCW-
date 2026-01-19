@@ -2540,8 +2540,8 @@
               ;; 4. 좌표 변환 (거리 → 실제 좌표)
               ;; pt1에서 seg-angle 방향으로 final-center-dist 만큼 이동
               (setq timber-pt (polar pt1 seg-angle final-center-dist))
-              ;; 그 후 외부 법선 방향으로 timber-offset 만큼 이동 (음수 = 바깥쪽)
-              (setq timber-pt-offset (polar timber-pt outward-normal (- timber-offset)))
+              ;; 그 후 외부 법선 방향으로 timber-offset 만큼 이동 (outward-normal이 이미 바깥 방향)
+              (setq timber-pt-offset (polar timber-pt outward-normal timber-offset))
               
               ;; 5. 객체 생성
               ;; POINT 생성 (디버그용)
