@@ -2274,8 +2274,9 @@
     
     ;; 각 토류판 위치에 대해 법선 방향으로 timber-offset만큼 이동 후 배치
     (foreach timber-pt timber-positions
-      ;; 원본 선 위의 점 → 외부 법선 방향으로 timber-offset만큼 이동 (양수)
-      (setq timber-pt-offset (polar timber-pt outward-normal timber-offset))
+      ;; 원본 선 위의 점 → 외부 법선 방향으로 timber-offset만큼 이동
+      ;; 오프셋을 음수로 하여 실제 바깥쪽으로 이동
+      (setq timber-pt-offset (polar timber-pt outward-normal (- timber-offset)))
       
       ;; POINT 생성 (토류판 중심 = 오프셋된 위치)
       (entmake
