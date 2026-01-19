@@ -2117,7 +2117,9 @@
   dist-from-pt1 dist-from-pt2 pt vertices vertex boundary-data item
   boundary-copy last-before-boundary first-new-boundary boundary-lines
   offset-sign orig-vertices seg-idx n-verts
-  outward-normal insert-pt hpile-positions hpile-pt hpile-rotation)
+  outward-normal insert-pt hpile-positions hpile-pt hpile-rotation
+  corner-gap min-dist-to-corner required-space adjusted-width timber-data 
+  timber-pt current-width timber-pt-offset is-closed max-segments)
   
   (debug-log "=== place-hpile-timber-along-boundary 시작 (새로운 로직) ===")
   (debug-log (strcat "전달받은 boundary-orient: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
@@ -2158,6 +2160,11 @@
   ;; 토류판 너비 계산
   (setq timber-width (- (* ctc 1000) 50))  ; C.T.C - 50mm (양쪽 25mm 여유)
   (debug-log (strcat "토류판 너비: " (rtos timber-width 2 2) "mm"))
+  
+  ;; 모서리 여유 공간(corner-gap) 계산
+  ;; corner-gap = (max h b) / 2.0 + 50.0
+  (setq corner-gap (+ (/ (max h b) 2.0) 50.0))
+  (debug-log (strcat "모서리 여유 공간(corner-gap): " (rtos corner-gap 2 2) "mm"))
   
   ;; H-Pile 블록 생성
   (setq hpile-block (create-hpile-section-block h b tw tf))
@@ -2229,6 +2236,7 @@
     
     ;; ===== 토류판 배치 (원본 선 위에서 계산 후 법선 방향 이동) =====
     ;; 토류판 위치: 0, CTC, 2*CTC, 3*CTC... (정확히 H-Pile 사이 중심)
+    ;; 각 토류판은 (위치 . 너비) 형식으로 저장
     (setq timber-positions '())
     
     ;; 왼쪽 방향 (음수)
@@ -2242,14 +2250,47 @@
       (setq dist-from-pt2 (distance pt2 new-pt))
       
       (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
-        (setq timber-positions (append timber-positions (list new-pt)))
+        (progn
+          ;; 동적 너비 계산: 모서리와의 충돌 검사
+          (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
+          (setq required-space (+ (/ timber-width 2.0) corner-gap))
+          
+          (if (< min-dist-to-corner required-space)
+            ;; 모서리에 너무 가까움 → 너비 축소
+            (progn
+              (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
+              (if (>= adjusted-width 100)
+                ;; 최소 너비(100mm) 이상이면 축소된 너비로 추가
+                (setq timber-positions (append timber-positions (list (cons new-pt adjusted-width))))
+                ;; 100mm 미만이면 토류판 생략
+                (princ (strcat "\n  [경고] 토류판 생략 (모서리 충돌): 위치=" (rtos dist 2 0) "mm, 조정너비=" (rtos adjusted-width 2 0) "mm"))
+              )
+            )
+            ;; 충분한 공간 있음 → 기본 너비 사용
+            (setq timber-positions (append timber-positions (list (cons new-pt timber-width))))
+          )
+        )
       )
       
       (setq i (1- i))
     )
     
     ;; 중점 추가 (0 CTC)
-    (setq timber-positions (append timber-positions (list mid-pt)))
+    (setq dist-from-pt1 (distance pt1 mid-pt))
+    (setq dist-from-pt2 (distance pt2 mid-pt))
+    (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
+    (setq required-space (+ (/ timber-width 2.0) corner-gap))
+    
+    (if (< min-dist-to-corner required-space)
+      (progn
+        (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
+        (if (>= adjusted-width 100)
+          (setq timber-positions (append timber-positions (list (cons mid-pt adjusted-width))))
+          (princ (strcat "\n  [경고] 중점 토류판 생략 (모서리 충돌): 조정너비=" (rtos adjusted-width 2 0) "mm"))
+        )
+      )
+      (setq timber-positions (append timber-positions (list (cons mid-pt timber-width))))
+    )
     
     ;; 오른쪽 방향 (양수)
     (setq i 1)
@@ -2262,7 +2303,26 @@
       (setq dist-from-pt2 (distance pt2 new-pt))
       
       (if (<= (+ dist-from-pt1 dist-from-pt2) (+ seg-length 0.1))
-        (setq timber-positions (append timber-positions (list new-pt)))
+        (progn
+          ;; 동적 너비 계산: 모서리와의 충돌 검사
+          (setq min-dist-to-corner (min dist-from-pt1 dist-from-pt2))
+          (setq required-space (+ (/ timber-width 2.0) corner-gap))
+          
+          (if (< min-dist-to-corner required-space)
+            ;; 모서리에 너무 가까움 → 너비 축소
+            (progn
+              (setq adjusted-width (* (- min-dist-to-corner corner-gap) 2.0))
+              (if (>= adjusted-width 100)
+                ;; 최소 너비(100mm) 이상이면 축소된 너비로 추가
+                (setq timber-positions (append timber-positions (list (cons new-pt adjusted-width))))
+                ;; 100mm 미만이면 토류판 생략
+                (princ (strcat "\n  [경고] 토류판 생략 (모서리 충돌): 위치=" (rtos dist 2 0) "mm, 조정너비=" (rtos adjusted-width 2 0) "mm"))
+              )
+            )
+            ;; 충분한 공간 있음 → 기본 너비 사용
+            (setq timber-positions (append timber-positions (list (cons new-pt timber-width))))
+          )
+        )
       )
       
       (setq i (1+ i))
@@ -2273,7 +2333,11 @@
     )
     
     ;; 각 토류판 위치에 대해 법선 방향으로 timber-offset만큼 이동 후 배치
-    (foreach timber-pt timber-positions
+    ;; timber-positions는 이제 (위치 . 너비) cons 쌍의 리스트
+    (foreach timber-data timber-positions
+      (setq timber-pt (car timber-data))
+      (setq current-width (cdr timber-data))
+      
       ;; 원본 선 위의 점 → 외부 법선 방향으로 timber-offset만큼 이동
       ;; 오프셋을 음수로 하여 실제 바깥쪽으로 이동
       (setq timber-pt-offset (polar timber-pt outward-normal (- timber-offset)))
@@ -2287,8 +2351,8 @@
         )
       )
       
-      ;; 토류판 객체 생성 (회전각 = seg-angle)
-      (create-timber-panel-object timber-pt-offset timber-width timber-thickness seg-angle)
+      ;; 토류판 객체 생성 (회전각 = seg-angle, 동적 너비 사용)
+      (create-timber-panel-object timber-pt-offset current-width timber-thickness seg-angle)
     )
     
     ;; ===== H-Pile 배치 (원본 선 위, CTC/2 간격) =====
