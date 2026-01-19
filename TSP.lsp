@@ -687,7 +687,7 @@
   ;;   - CCW(1): 왼쪽=안쪽 → 음수 오프셋
   ;;   - CW(-1): 오른쪽=안쪽 → 양수 오프셋
   ;; 
-  ;; ★★★ 오프셋 부호 설정 (outward-normal이 이미 바깥쪽을 가리킴) ★★★
+  ;; 오프셋 부호 설정 (outward-normal이 이미 바깥쪽을 가리킴)
   ;; 띠장: 안쪽 (outward-normal 반대 방향) → boundary-orient 그대로 사용
   ;; 토류판: 바깥쪽 (outward-normal 방향) → 이미 place-hpile-timber-along-boundary에서 처리
   (setq wale-offset-sign boundary-orient)           ; 띠장: 안쪽 (outward-normal 반전되었으므로)
@@ -1229,14 +1229,14 @@
              (debug-log (strcat "경계선 엔티티: " (vl-princ-to-string boundary-ent)))
              (debug-log (strcat "엔티티 타입: " (cdr (assoc 0 (entget boundary-ent)))))
              
-             ;; ★★★ 1단계: 방향 판별 (띠장/H-Pile 생성 전) ★★★
+             ;; 1단계: 방향 판별 (띠장/H-Pile 생성 전)
              (setq boundary-orient (determine-boundary-orientation boundary-ent))
              (debug-log (strcat "판별된 방향: " (if (= boundary-orient 1) "CCW(1)" "CW(-1)")))
              
-             ;; ★★★ 2단계: 띠장 옵셋 생성 (방향 전달) ★★★
+             ;; 2단계: 띠장 옵셋 생성 (방향 전달)
              (create-wale-offsets boundary-ent *tsp-wale-spec* boundary-orient)
              
-             ;; ★★★ 3단계: H-Pile 세트 생성 (방향 전달) ★★★
+             ;; 3단계: H-Pile 세트 생성 (방향 전달)
              (princ "\n\n>>> H-Pile 세트 생성 시작...")
              (debug-log "=== H-Pile 세트 생성 시작 ===")
              (create-hpile-set-on-boundary boundary-ent *tsp-hpile-spec* *tsp-ctc* boundary-orient)
@@ -2021,7 +2021,7 @@
   (princ (strcat "\n[모서리] 꼭지점: (" (rtos (car vertex) 2 2) ", " (rtos (cadr vertex) 2 2) ")"))
   (princ (strcat "\n  angle1=" (rtos (* angle1 (/ 180.0 pi)) 2 1) "도, angle2=" (rtos (* angle2 (/ 180.0 pi)) 2 1) "도"))
   
-  ;; ★★★ 벡터 외적으로 볼록/오목 판단 ★★★
+  ;; 벡터 외적으로 볼록/오목 판단
   (setq is-convex (is-corner-convex prev-vertex vertex next-vertex boundary-orient))
   (princ (if is-convex "\n  타입: 볼록(Convex)" "\n  타입: 오목(Concave)"))
   
@@ -2034,7 +2034,7 @@
   (setq bisector-angle (+ angle1 (/ interior-angle 2.0)))
   (princ (strcat "\n  기하학 이등분선=" (rtos (* bisector-angle (/ 180.0 pi)) 2 1) "도"))
   
-  ;; ★★★ 띠장 모서리 방향 계산 (경계선 방향 고려) ★★★
+  ;; 띠장 모서리 방향 계산 (경계선 방향 고려)
   ;; 띠장 = 경계선에서 수직으로 timber-offset만큼 떨어진 선
   ;; CCW: 진행방향의 왼쪽(+90°)이 바깥쪽
   ;; CW: 진행방향의 오른쪽(-90°)이 바깥쪽
@@ -2405,7 +2405,7 @@
     (setq num-right (fix (/ half-length ctc-mm)))
     
     ;; 외부 법선 방향 계산
-    ;; ★★★ 중요: boundary-orient 반전 필요! ★★★
+    ;; 중요: boundary-orient 반전 필요!
     ;; boundary-orient의 의미:
     ;;   - 폐합 다각형: Shoelace 공식으로 자동 판별
     ;;     • CCW(1): 진행방향 왼쪽 = **안쪽** → 반전하여 오른쪽(-90°) = 바깥쪽
@@ -2427,7 +2427,7 @@
     (debug-log (strcat "  각도: " (rtos (* seg-angle (/ 180.0 pi)) 2 1) "°"))
     (debug-log (strcat "  외부 법선 각도: " (rtos (* outward-normal (/ 180.0 pi)) 2 1) "°"))
     
-    ;; ★★★ 충돌 제한선(Limit) 계산 ★★★
+    ;; 충돌 제한선(Limit) 계산
     ;; pt1 (시작점) 모서리 H-Pile 정보 찾기
     (setq start-corner-info nil)
     (foreach corner-pair corner-hpiles
