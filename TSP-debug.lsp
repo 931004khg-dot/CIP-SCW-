@@ -2224,10 +2224,10 @@
     (setq num-right (fix (/ half-length ctc-mm)))
     
     ;; 외부 법선 방향 계산 (원본 경계선 기준)
-    ;; CCW(1): 왼쪽=안쪽, 오른쪽=바깥 → 바깥쪽 = seg-angle - 90°
-    ;; CW(-1): 오른쪽=안쪽, 왼쪽=바깥 → 바깥쪽 = seg-angle + 90°
-    ;; 결론: outward-normal = seg-angle - (boundary-orient * 90°)
-    (setq outward-normal (- seg-angle (* boundary-orient (/ pi 2.0))))
+    ;; CCW(1): 진행방향 왼쪽(+90°) = 바깥쪽
+    ;; CW(-1): 진행방향 오른쪽(-90°) = 바깥쪽
+    ;; 결론: outward-normal = seg-angle + (boundary-orient * 90°)
+    (setq outward-normal (+ seg-angle (* boundary-orient (/ pi 2.0))))
     
     ;; ===== 토류판 배치 (원본 선 위에서 계산 후 법선 방향 이동) =====
     ;; 토류판 위치: 0, CTC, 2*CTC, 3*CTC... (정확히 H-Pile 사이 중심)
@@ -2279,11 +2279,11 @@
       ;; 원본 선 위의 점 → 법선 방향으로 timber-offset만큼 이동
       (setq timber-pt-offset (polar timber-pt outward-normal (* timber-offset timber-offset-sign)))
       
-      ;; POINT 생성 (원본 선 위)
+      ;; POINT 생성 (토류판 중심 = 오프셋된 위치)
       (entmake
         (list
           '(0 . "POINT")
-          (cons 10 timber-pt)
+          (cons 10 timber-pt-offset)
           '(8 . "_토류판(timber)")
         )
       )
