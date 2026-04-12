@@ -9798,7 +9798,7 @@
 
 
 
-      ;; [수정] 벽체 타입(WALL-TYPE)에 따라 출력 텍스트 분기
+      ;; [7단계] 벽체 타입(WALL-TYPE)에 따라 출력 텍스트 분기 (nil 안전 처리 포함)
 
       (setq w-type (cdr (assoc 'WALL-TYPE seg-data)))
 
@@ -9810,13 +9810,27 @@
 
         (progn
 
-          (setq s-spec (nth (atoi (cdr (assoc 'CIP-HPILE-IDX seg-data))) *tsp-std-wall-list*))
+          ;; [7단계] CIP-HPILE-IDX nil 가드: nil이면 기본값 "0" 사용
+          (setq s-spec
+            (let* ((raw-idx (cdr (assoc 'CIP-HPILE-IDX seg-data)))
+                   (idx-val (if raw-idx (atoi raw-idx) 0))
+                   (safe-idx (if (and (>= idx-val 0) (< idx-val (length *tsp-std-wall-list*)))
+                                 idx-val 0)))
+              (nth safe-idx *tsp-std-wall-list*)))
 
           (setq wall-short (format-h-spec-short s-spec nil nil))
 
+          ;; [7단계] CIP-DIA nil 가드: nil이면 기본값 "450" 사용
           (setq cip-dia (cdr (assoc 'CIP-DIA seg-data)))
+          (if (not cip-dia) (setq cip-dia "450"))
 
-          (setq w-spec (nth (atoi (cdr (assoc 'CIP-WALE-IDX seg-data))) *tsp-std-wall-list*))
+          ;; [7단계] CIP-WALE-IDX nil 가드: nil이면 기본값 "0" 사용
+          (setq w-spec
+            (let* ((raw-widx (cdr (assoc 'CIP-WALE-IDX seg-data)))
+                   (widx-val (if raw-widx (atoi raw-widx) 0))
+                   (safe-widx (if (and (>= widx-val 0) (< widx-val (length *tsp-std-wall-list*)))
+                                  widx-val 0)))
+              (nth safe-widx *tsp-std-wall-list*)))
 
           (setq wale-short (format-h-spec-short w-spec nil has-anchor-str))
 
@@ -9850,9 +9864,15 @@
 
     )
 
+    ;; [7단계] 미정의 세그먼트: WALL-TYPE 읽어서 공법명 표시 (내부 상태와 UI 동기화)
     (progn
 
-      (strcat s-id "\t" s-name "\t" "" "\t" "" "\t" "" "\t" "" "\t" s-brace-str)
+      (setq w-type (cdr (assoc 'WALL-TYPE seg-data)))
+      (if (not w-type) (setq w-type "HPILE"))
+
+      (strcat s-id "\t" s-name "\t" "-" "\t"
+              (if (= w-type "CIP") "CIP (현장타설)" "H-Pile+토류판")
+              "\t" "(미설정)" "\t" "-" "\t" s-brace-str)
 
     )
 
