@@ -8819,7 +8819,8 @@
 
   
 
-  (while (and (>= step 1) (< step 7))
+  ;; [step 41 허용] CIP 다이얼로그 step(=41)도 루프 내에서 처리되도록 조건 확장
+  (while (and (>= step 1) (or (< step 7) (= step 41)))
 
     (if *tsp-boundary-ent* (tsp-zoom-to-right-half (extract-vertices *tsp-boundary-ent*)))
 
