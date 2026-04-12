@@ -9799,7 +9799,8 @@
 
     (cons 'EMBED-DEPTH *tsp-embedment-depth*)
 
-    ;; === C.I.P 전용 데이터 편입 시작 ===
+    ;; === [6단계] C.I.P 전용 데이터 저장 (세그먼트별 독립 보관) ===
+    ;; 이 9개 키가 세그먼트에 저장되어야 load-segment-to-globals로 완전 복원 가능
 
     (cons 'CIP-MAX-DEPTH *tsp-cip-max-depth*)
 
@@ -9817,7 +9818,7 @@
 
     (cons 'CIP-INTERVAL-IDX *tsp-cip-interval-idx*)
 
-    ;; === C.I.P 전용 데이터 편입 끝 ===
+    ;; === [6단계] C.I.P 전용 데이터 저장 끝 ===
 
     (cons 'WATER-CHK *tsp-water-chk*)
 
@@ -9903,25 +9904,25 @@
 
 
 
-  ;; === C.I.P 전용 데이터 복원 (안전장치 적용) ===
+  ;; === [6단계] C.I.P 전용 데이터 복원 (폴백 기본값은 init-segment-data와 통일) ===
 
   (setq val (cdr (assoc 'CIP-MAX-DEPTH seg-data))) (setq *tsp-cip-max-depth* (if val val "10.0"))
 
   (setq val (cdr (assoc 'CIP-EMBED-DEPTH seg-data))) (setq *tsp-cip-embed-depth* (if val val "3.0"))
 
-  (setq val (cdr (assoc 'CIP-HPILE-IDX seg-data))) (setq *tsp-cip-hpile-idx* (if val val "2"))
+  (setq val (cdr (assoc 'CIP-HPILE-IDX seg-data))) (setq *tsp-cip-hpile-idx* (if val val "0"))  ; [6단계] 기본값 통일: "2"->"0" (init-segment-data 일치)
 
-  (setq val (cdr (assoc 'CIP-WALE-IDX seg-data))) (setq *tsp-cip-wale-idx* (if val val "2"))
+  (setq val (cdr (assoc 'CIP-WALE-IDX seg-data))) (setq *tsp-cip-wale-idx* (if val val "0"))  ; [6단계] 기본값 통일: "2"->"0"
 
-  (setq val (cdr (assoc 'CIP-DIA seg-data))) (setq *tsp-cip-dia* (if val val "500"))
+  (setq val (cdr (assoc 'CIP-DIA seg-data))) (setq *tsp-cip-dia* (if val val "450"))  ; [6단계] 기본값 통일: "500"->"450" (init-segment-data 일치)
 
   (setq val (cdr (assoc 'CIP-MODE-IDX seg-data))) (setq *tsp-cip-mode-idx* (if val val "0"))
 
-  (setq val (cdr (assoc 'CIP-OVERLAP seg-data))) (setq *tsp-cip-overlap* (if val val "50"))
+  (setq val (cdr (assoc 'CIP-OVERLAP seg-data))) (setq *tsp-cip-overlap* (if val val "0"))  ; [6단계] 기본값 통일: "50"->"0"
 
   (setq val (cdr (assoc 'CIP-INTERVAL-IDX seg-data))) (setq *tsp-cip-interval-idx* (if val val "0"))
 
-  ;; === C.I.P 전용 데이터 복원 끝 ===
+  ;; === [6단계] C.I.P 전용 데이터 복원 끝 ===
 
 
 
