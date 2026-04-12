@@ -8785,6 +8785,14 @@
 
   (setq seg-data (nth idx *segment-list*))
 
+  ;; [2단계 고정] 신규 세그먼트 진입 시 wall-type을 "HPILE"로 초기화
+  ;; 이전 세그먼트의 C.I.P 상태가 다음 세그먼트로 새는 것을 방지
+  ;; (기존 세그먼트 수정 시에는 load-segment-to-globals가 저장값을 복원하므로
+  ;;  IS-DEFINED=T인 경우는 건드리지 않음)
+  (if (not (cdr (assoc 'IS-DEFINED seg-data)))
+    (setq *tsp-wall-type* "HPILE")
+  )
+
   (setq current-draw (cdr (assoc 'SECTION-DRAW seg-data)))
 
   
