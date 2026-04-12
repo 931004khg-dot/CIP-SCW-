@@ -5048,6 +5048,12 @@
 
     (setq mid-pile-count 0) 
 
+    ;; [7단계] CIP 세그먼트는 place-hpile-timber에서 건너뜀
+    ;; (CIP는 tsp-draw-cip-plan-per-segment에서 별도 처리)
+    (if (= (cdr (assoc 'WALL-TYPE seg-data)) "CIP")
+      (setq is-def nil)
+    )
+
     
 
     (if is-def
@@ -5848,7 +5854,8 @@
 
 ;;; --------------------------------------------------------------------------
 
-(defun create-hpile-set-on-boundary (boundary-ent boundary-orient / last-ent vertices)
+(defun create-hpile-set-on-boundary (boundary-ent boundary-orient / last-ent vertices
+                                      seg-data seg-wall-type has-cip has-hpile)
 
   ;; 1. 기존 그룹 정리 (번호표 포함 모든 객체 삭제)
 
@@ -5870,26 +5877,59 @@
 
   
 
-  ;; 4. 흙막이벽 작도 (공법별 분기)
+  ;; 4. 흙막이벽 작도 - [7단계] 세그먼트별 공법 분기
+  ;; 전역 *tsp-wall-type* 하나로 전체 경계선을 그리던 방식에서
+  ;; 각 세그먼트의 저장된 WALL-TYPE을 읽어 공법별로 나눠 그리는 방식으로 변경
 
-  (if (= *tsp-wall-type* "CIP")
+  ;; 4-1. 세그먼트에 CIP / HPILE 이 섞여있는지 파악
+  (setq has-cip nil  has-hpile nil)
 
-    (progn
-
-      (princ "\n[작도] C.I.P(현장타설말뚝) 배열 생성 중...")
-
-      (tsp-draw-cip-plan boundary-ent boundary-orient)
-
+  (if *segment-list*
+    (foreach seg-data *segment-list*
+      (if (cdr (assoc 'IS-DEFINED seg-data))
+        (progn
+          (setq seg-wall-type (cdr (assoc 'WALL-TYPE seg-data)))
+          (if (= seg-wall-type "CIP")
+            (setq has-cip T)
+            (setq has-hpile T)
+          )
+        )
+      )
     )
+  )
 
+  ;; 4-2. H-Pile+토류판 세그먼트가 하나라도 있으면 place-hpile-timber 실행
+  ;;      (place-hpile은 내부 루프에서 IS-DEFINED 체크로 세그먼트별 처리)
+  (if has-hpile
     (progn
-
       (princ "\n[작도] H-Pile 및 토류판 생성 중...")
-
       (place-hpile-timber-along-boundary boundary-ent boundary-orient)
-
     )
+  )
 
+  ;; 4-3. CIP 세그먼트는 하나씩 전역변수 임시 설정 후 작도
+  ;;      각 세그먼트의 CIP 파라미터를 전역에 로드 → 해당 세그먼트 범위만 작도
+  (if has-cip
+    (progn
+      (princ "\n[작도] C.I.P(현장타설말뚝) 배열 생성 중...")
+      (tsp-draw-cip-plan-per-segment boundary-ent boundary-orient)
+    )
+  )
+
+  ;; 4-4. 세그먼트가 없거나 모두 미정의 상태이면 전역값으로 폴백 (안전장치)
+  (if (and (not has-cip) (not has-hpile))
+    (progn
+      (if (= *tsp-wall-type* "CIP")
+        (progn
+          (princ "\n[작도] C.I.P(현장타설말뚝) 배열 생성 중... (전역 폴백)")
+          (tsp-draw-cip-plan boundary-ent boundary-orient)
+        )
+        (progn
+          (princ "\n[작도] H-Pile 및 토류판 생성 중... (전역 폴백)")
+          (place-hpile-timber-along-boundary boundary-ent boundary-orient)
+        )
+      )
+    )
   )
 
 
@@ -6193,6 +6233,149 @@
     )
 
   )
+
+)
+
+
+
+;;;;==========================================================================
+
+;;;; defun tsp-draw-cip-plan-per-segment : 세그먼트별 CIP 작도 (공법 혼용 지원)
+;;;; CIP로 설정된 세그먼트만 골라 각 세그먼트의 저장 파라미터로 개별 작도
+
+;;;;==========================================================================
+
+(defun tsp-draw-cip-plan-per-segment (boundary-ent boundary-orient
+                                      / is-closed seg-data seg-idx seg-wall-type
+                                        orig-vertices n-verts max-segs
+                                        pt1 pt2 seg-guide layout
+                                        save-dia save-mode save-overlap
+                                        save-interval save-hpile-idx)
+
+  (setq is-closed (is-closed-polyline boundary-ent))
+
+  (setq orig-vertices (mapcar '(lambda (s) (cdr (assoc 'V-START s))) *segment-list*))
+
+  (if (not is-closed)
+    (setq orig-vertices (append orig-vertices (list (cdr (assoc 'V-END (last *segment-list*))))))
+  )
+
+  (setq n-verts (length orig-vertices))
+
+  (setq max-segs (if is-closed n-verts (1- n-verts)))
+
+  (setq seg-idx 0)
+
+  (while (< seg-idx max-segs)
+
+    (setq seg-data (nth seg-idx *segment-list*))
+
+    (setq seg-wall-type (cdr (assoc 'WALL-TYPE seg-data)))
+
+    ;; CIP 세그먼트이고 IS-DEFINED인 경우에만 작도
+    (if (and (= seg-wall-type "CIP")
+             (cdr (assoc 'IS-DEFINED seg-data)))
+
+      (progn
+
+        ;; 해당 세그먼트의 CIP 파라미터를 전역변수에 임시 로드
+        (setq save-dia          *tsp-cip-dia*)
+        (setq save-mode         *tsp-cip-mode-idx*)
+        (setq save-overlap      *tsp-cip-overlap*)
+        (setq save-interval     *tsp-cip-interval-idx*)
+        (setq save-hpile-idx    *tsp-cip-hpile-idx*)
+
+        (setq *tsp-cip-dia*          (cdr (assoc 'CIP-DIA          seg-data)))
+        (setq *tsp-cip-mode-idx*     (cdr (assoc 'CIP-MODE-IDX     seg-data)))
+        (setq *tsp-cip-overlap*      (cdr (assoc 'CIP-OVERLAP      seg-data)))
+        (setq *tsp-cip-interval-idx* (cdr (assoc 'CIP-INTERVAL-IDX seg-data)))
+        (setq *tsp-cip-hpile-idx*    (cdr (assoc 'CIP-HPILE-IDX    seg-data)))
+
+        ;; 해당 세그먼트 구간만 임시 폴리선 생성 후 CIP 작도
+        (setq pt1 (nth seg-idx orig-vertices))
+        (setq pt2 (nth (if is-closed (rem (+ seg-idx 1) n-verts) (+ seg-idx 1)) orig-vertices))
+
+        (setq seg-guide (tsp-make-segment-guideline pt1 pt2
+                          (atof *tsp-cip-dia*) boundary-orient))
+
+        (if seg-guide
+
+          (progn
+
+            (setq layout (tsp-calc-cip-layout seg-guide nil
+                           (atof *tsp-cip-dia*)
+                           *tsp-cip-mode-idx*
+                           (atof *tsp-cip-overlap*)))
+
+            (tsp-draw-cip-elements layout
+                                   (atof *tsp-cip-dia*)
+                                   *tsp-cip-interval-idx*
+                                   *tsp-cip-hpile-idx*
+                                   boundary-orient)
+
+            (entdel seg-guide)
+
+          )
+
+          (princ (strcat "\n[경고] 세그먼트 " (itoa (1+ seg-idx)) " CIP 보조선 생성 실패 - 건너뜀"))
+
+        )
+
+        ;; 전역변수 원상복귀
+        (setq *tsp-cip-dia*          save-dia)
+        (setq *tsp-cip-mode-idx*     save-mode)
+        (setq *tsp-cip-overlap*      save-overlap)
+        (setq *tsp-cip-interval-idx* save-interval)
+        (setq *tsp-cip-hpile-idx*    save-hpile-idx)
+
+      )
+
+    )
+
+    (setq seg-idx (1+ seg-idx))
+
+  )
+
+)
+
+
+
+;;;;==========================================================================
+
+;;;; defun tsp-make-segment-guideline : 두 점으로 세그먼트 구간 보조선 생성
+
+;;;;==========================================================================
+
+(defun tsp-make-segment-guideline (pt1 pt2 dia boundary-orient
+                                   / seg-angle out-norm offset-pt guide-ent d)
+
+  (setq d (/ dia 2.0))
+
+  (setq seg-angle (angle pt1 pt2))
+
+  (setq out-norm (+ seg-angle (* boundary-orient (/ pi 2.0))))
+
+  ;; pt1 → pt2 방향의 임시 직선 폴리선 생성 후 D/2 외측으로 오프셋
+  (entmake (list '(0 . "LWPOLYLINE")
+                 '(100 . "AcDbEntity")
+                 '(100 . "AcDbPolyline")
+                 '(8 . "0") '(62 . 256) '(90 . 2) '(70 . 0)
+                 (list 10 (car pt1) (cadr pt1))
+                 (list 10 (car pt2) (cadr pt2))))
+
+  (setq guide-ent (entlast))
+
+  ;; 오프셋 대상점 계산 (외측 방향)
+  (setq offset-pt (polar pt1 out-norm d))
+
+  (command "._OFFSET" d guide-ent
+           (list (car offset-pt) (cadr offset-pt) 0.0) "")
+
+  (entdel guide-ent)
+
+  (setq guide-ent (entlast))
+
+  guide-ent
 
 )
 
