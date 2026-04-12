@@ -8879,8 +8879,12 @@
 
         (cond 
 
-          ((= sub-status 1) (setq step 4)) 
+          ;; H-Pile 선택: wall-type을 즉시 "HPILE"로 확정
+          ((= sub-status 1)
+            (setq *tsp-wall-type* "HPILE")
+            (setq step 4)) 
 
+          ;; C.I.P 선택: step 41로 진입 (wall-type은 CIP 다이얼로그 OK 시에만 "CIP"로 확정)
           ((= sub-status 11) (setq step 41)) 
 
           ((= sub-status 2) (if current-draw (setq step 2) (setq step 1))) 
@@ -10129,7 +10133,14 @@
 
        (setq paste-mode nil apply-all-mode nil apply-soil-mode nil apply-support-mode nil)
 
-       (if (and *tsp-boundary-ent* *tsp-boundary-orient*) (tsp-redraw-realtime-plan *tsp-boundary-ent* *tsp-boundary-orient*))
+       ;; [버그2 수정] 실시간 작도 전 저장된 세그먼트 데이터를 전역변수로 복원
+       ;; wizard/수정 완료 후 전역변수가 마지막 입력값으로 남아 wall-type 오염 방지
+       (if (and *tsp-boundary-ent* *tsp-boundary-orient*)
+         (progn
+           (load-segment-to-globals selected-idx)
+           (tsp-redraw-realtime-plan *tsp-boundary-ent* *tsp-boundary-orient*)
+         )
+       )
 
       )
 
@@ -10143,7 +10154,13 @@
 
        (setq paste-mode nil apply-all-mode nil apply-soil-mode nil apply-support-mode nil)
 
-       (if (and *tsp-boundary-ent* *tsp-boundary-orient*) (tsp-redraw-realtime-plan *tsp-boundary-ent* *tsp-boundary-orient*))
+       ;; [버그2 수정] 수정 완료 후도 동일하게 해당 세그먼트 데이터 복원 후 작도
+       (if (and *tsp-boundary-ent* *tsp-boundary-orient*)
+         (progn
+           (load-segment-to-globals selected-idx)
+           (tsp-redraw-realtime-plan *tsp-boundary-ent* *tsp-boundary-orient*)
+         )
+       )
 
       )
 
