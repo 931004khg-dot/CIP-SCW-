@@ -8117,9 +8117,10 @@
 
   
 
-  (action_tile "back" "(done_dialog 2)")
+  ;; [3단계] Back/Cancel 시 wall-type HPILE 복원 (CIP 확정 전 취소 = H-Pile 상태로 되돌림)
+  (action_tile "back"   "(progn (setq *tsp-wall-type* \"HPILE\") (done_dialog 2))")
 
-  (action_tile "cancel" "(done_dialog 0)")
+  (action_tile "cancel" "(progn (setq *tsp-wall-type* \"HPILE\") (done_dialog 0))")
 
   (action_tile "accept" 
 
@@ -8715,8 +8716,10 @@
 
     (progn
 
-      (action_tile "btn_hpile" "(done_dialog 1)")
+      ;; [3단계] H-Pile: 즉시 "HPILE" 확정
+      (action_tile "btn_hpile" "(progn (setq *tsp-wall-type* \"HPILE\") (done_dialog 1))")
 
+      ;; [3단계] C.I.P: wall-type 건드리지 않고 step만 넘김 (확정은 CIP 다이얼로그 OK에서만)
       (action_tile "btn_cip" "(done_dialog 11)")
 
       (action_tile "btn_scw" "(alert \"SCW 공법은 아직 구현되지 않았습니다.\")")
@@ -8880,12 +8883,10 @@
 
         (cond 
 
-          ;; H-Pile 선택: wall-type을 즉시 "HPILE"로 확정
-          ((= sub-status 1)
-            (setq *tsp-wall-type* "HPILE")
-            (setq step 4)) 
+          ;; H-Pile 선택: main-dialog-callback에서 이미 "HPILE" 확정됨
+          ((= sub-status 1) (setq step 4)) 
 
-          ;; C.I.P 선택: step 41로 진입 (wall-type은 CIP 다이얼로그 OK 시에만 "CIP"로 확정)
+          ;; C.I.P 선택: step 41로만 전환, wall-type은 CIP 다이얼로그 OK에서만 "CIP" 확정
           ((= sub-status 11) (setq step 41)) 
 
           ((= sub-status 2) (if current-draw (setq step 2) (setq step 1))) 
