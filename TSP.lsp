@@ -2281,6 +2281,45 @@
 
         )
 
+        ;; [5단계] 기존 세그먼트에 WALL-TYPE 키가 없으면 "HPILE"로 보완
+        ;; (과거 저장 데이터 호환성 - 이전 버전에서 저장된 세그먼트에 WALL-TYPE 없을 때)
+        (if (not (assoc 'WALL-TYPE seg-data))
+          (setq seg-data (append seg-data (list (cons 'WALL-TYPE "HPILE"))))
+        )
+
+        ;; [5단계] 기존 세그먼트에 CIP 파라미터 키가 없으면 기본값으로 보완
+        (if (not (assoc 'CIP-MAX-DEPTH seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-MAX-DEPTH "10.0"))))
+        )
+
+        (if (not (assoc 'CIP-EMBED-DEPTH seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-EMBED-DEPTH "3.0"))))
+        )
+
+        (if (not (assoc 'CIP-HPILE-IDX seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-HPILE-IDX "0"))))
+        )
+
+        (if (not (assoc 'CIP-WALE-IDX seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-WALE-IDX "0"))))
+        )
+
+        (if (not (assoc 'CIP-DIA seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-DIA "450"))))
+        )
+
+        (if (not (assoc 'CIP-MODE-IDX seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-MODE-IDX "0"))))
+        )
+
+        (if (not (assoc 'CIP-OVERLAP seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-OVERLAP "0"))))
+        )
+
+        (if (not (assoc 'CIP-INTERVAL-IDX seg-data))
+          (setq seg-data (append seg-data (list (cons 'CIP-INTERVAL-IDX "0"))))
+        )
+
       )
 
       (progn
@@ -2330,6 +2369,26 @@
           (cons 'CORNER-BRACE default-brace-data)
 
           (cons 'UPGRADE-WALE nil)
+
+          ;; [5단계] 신규 세그먼트 기본값 - nil 방지용 안전장치
+          ;; WALL-TYPE은 항상 "HPILE"로 시작, CIP는 다이얼로그 OK 후에만 변경됨
+          (cons 'WALL-TYPE "HPILE")
+
+          (cons 'CIP-MAX-DEPTH "10.0")
+
+          (cons 'CIP-EMBED-DEPTH "3.0")
+
+          (cons 'CIP-HPILE-IDX "0")
+
+          (cons 'CIP-WALE-IDX "0")
+
+          (cons 'CIP-DIA "450")
+
+          (cons 'CIP-MODE-IDX "0")
+
+          (cons 'CIP-OVERLAP "0")
+
+          (cons 'CIP-INTERVAL-IDX "0")
 
           (cons 'V-START pt1)
 
