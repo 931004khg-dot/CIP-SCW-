@@ -8049,13 +8049,36 @@
 
 ;;;;==========================================================================
 
-(defun tsp-run-cip-dialog ( / dcl-id dcl-file mode-list interval-list dcl-status )
+(defun tsp-run-cip-dialog
+  ( / dcl-id dcl-file mode-list interval-list dcl-status
+      ;; [4단계] 진입 전 상태 백업용 로컬변수
+      bak-wall-type
+      bak-cip-max-depth bak-cip-embed-depth
+      bak-cip-hpile-idx bak-cip-wale-idx
+      bak-cip-dia bak-cip-mode-idx
+      bak-cip-overlap bak-cip-interval-idx
+  )
+
 
   (setq dcl-file (tsp-create-cip-dcl))
 
   (setq dcl-id (load_dialog dcl-file))
 
   (if (not (new_dialog "tsp_cip_dlg" dcl-id)) (exit))
+
+
+
+  ;; [4단계] 다이얼로그 진입 직후 전역 상태 백업
+  ;; Cancel / Back 시 이 값으로 복원하여 전역변수 오염 방지
+  (setq bak-wall-type        *tsp-wall-type*)
+  (setq bak-cip-max-depth    *tsp-cip-max-depth*)
+  (setq bak-cip-embed-depth  *tsp-cip-embed-depth*)
+  (setq bak-cip-hpile-idx    *tsp-cip-hpile-idx*)
+  (setq bak-cip-wale-idx     *tsp-cip-wale-idx*)
+  (setq bak-cip-dia          *tsp-cip-dia*)
+  (setq bak-cip-mode-idx     *tsp-cip-mode-idx*)
+  (setq bak-cip-overlap      *tsp-cip-overlap*)
+  (setq bak-cip-interval-idx *tsp-cip-interval-idx*)
 
 
 
@@ -8117,10 +8140,34 @@
 
   
 
-  ;; [3단계] Back/Cancel 시 wall-type HPILE 복원 (CIP 확정 전 취소 = H-Pile 상태로 되돌림)
-  (action_tile "back"   "(progn (setq *tsp-wall-type* \"HPILE\") (done_dialog 2))")
+  ;; [4단계] Back/Cancel: 진입 전 백업값으로 전역변수 전체 복원
+  (action_tile "back"
+    "(progn
+       (setq *tsp-wall-type*        bak-wall-type)
+       (setq *tsp-cip-max-depth*    bak-cip-max-depth)
+       (setq *tsp-cip-embed-depth*  bak-cip-embed-depth)
+       (setq *tsp-cip-hpile-idx*    bak-cip-hpile-idx)
+       (setq *tsp-cip-wale-idx*     bak-cip-wale-idx)
+       (setq *tsp-cip-dia*          bak-cip-dia)
+       (setq *tsp-cip-mode-idx*     bak-cip-mode-idx)
+       (setq *tsp-cip-overlap*      bak-cip-overlap)
+       (setq *tsp-cip-interval-idx* bak-cip-interval-idx)
+       (done_dialog 2)
+     )")
 
-  (action_tile "cancel" "(progn (setq *tsp-wall-type* \"HPILE\") (done_dialog 0))")
+  (action_tile "cancel"
+    "(progn
+       (setq *tsp-wall-type*        bak-wall-type)
+       (setq *tsp-cip-max-depth*    bak-cip-max-depth)
+       (setq *tsp-cip-embed-depth*  bak-cip-embed-depth)
+       (setq *tsp-cip-hpile-idx*    bak-cip-hpile-idx)
+       (setq *tsp-cip-wale-idx*     bak-cip-wale-idx)
+       (setq *tsp-cip-dia*          bak-cip-dia)
+       (setq *tsp-cip-mode-idx*     bak-cip-mode-idx)
+       (setq *tsp-cip-overlap*      bak-cip-overlap)
+       (setq *tsp-cip-interval-idx* bak-cip-interval-idx)
+       (done_dialog 0)
+     )")
 
   (action_tile "accept" 
 
