@@ -9450,13 +9450,22 @@
 
       ((= menu-status 3)
 
+       ;; [8단계] 벽체 수정 진입 시 세그먼트 저장값으로 전역 복원
+       ;; → main-dialog가 현재 세그먼트의 공법(WALL-TYPE)을 기준으로 열림
+       (load-segment-to-globals idx)
+
        (setq wall-choice (main-dialog-callback dcl-path))
 
        (cond
 
+         ;; H-Pile 선택 → hpile-dialog 진행
          ((= wall-choice 1) (hpile-dialog-callback dcl-path))
 
+         ;; C.I.P 선택 → CIP 다이얼로그 진행
          ((= wall-choice 11) (tsp-run-cip-dialog))
+
+         ;; Back(=2) 또는 Cancel(0/-1): 전역 오염 방지를 위해 세그먼트 값 재복원
+         (t (load-segment-to-globals idx))
 
        )
 
