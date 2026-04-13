@@ -6178,7 +6178,7 @@
 
 ;;;;==========================================================================
 
-(defun tsp-draw-cip-elements (layout dia interval-idx hpile-idx boundary-orient / interval items hpile-spec-name hpile-vals h b tw tf hpile-block idx dist pt ang outward-normal hpile-rotation)
+(defun tsp-draw-cip-elements (layout dia interval-idx hpile-idx boundary-orient / interval items hpile-spec-name hpile-vals h b tw tf hpile-block idx dist pt ang outward-normal hpile-rotation insert-pt half-h-offset)
 
   (setq interval (cond ((= interval-idx "1") 2) ((= interval-idx "2") 3) (t 1)))
 
@@ -6226,7 +6226,16 @@
 
          (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
 
-         (entmake (list '(0 . "INSERT") (cons 2 hpile-block) '(8 . "_측면말뚝") (list 10 (car pt) (cadr pt) 0.0) '(41 . 1.0) '(42 . 1.0) '(43 . 1.0) (cons 50 hpile-rotation)))
+         ;; [③ 수정] 블록 기준점(0, -half_h)이 플렌지 바닥이므로
+         ;; H-Pile 단면 중심을 CIP 원 중심 pt에 맞추려면
+         ;; INSERT 점을 outward-normal 방향으로 -(h/2) 이동
+         (setq half-h-offset (/ h 2.0))
+         (setq insert-pt (polar pt outward-normal (- half-h-offset)))
+
+         (entmake (list '(0 . "INSERT") (cons 2 hpile-block) '(8 . "_측면말뚝")
+                        (list 10 (car insert-pt) (cadr insert-pt) 0.0)
+                        '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                        (cons 50 hpile-rotation)))
 
       )
 
@@ -6347,7 +6356,8 @@
 ;;;;==========================================================================
 
 (defun tsp-make-segment-guideline (pt1 pt2 dia boundary-orient
-                                   / seg-angle out-norm offset-pt guide-ent d)
+                                   / seg-angle out-norm target-pt guide-ent d
+                                     off-ent off-start offset-pt)
 
   (setq d (/ dia 2.0))
 
@@ -6355,7 +6365,10 @@
 
   (setq out-norm (+ seg-angle (* boundary-orient (/ pi 2.0))))
 
-  ;; pt1 → pt2 방향의 임시 직선 폴리선 생성 후 D/2 외측으로 오프셋
+  ;; 수학적으로 외측 위치 계산 (tsp-create-cip-guideline과 동일 방식)
+  (setq target-pt (polar pt1 out-norm d))
+
+  ;; pt1 → pt2 임시 직선 폴리선 생성
   (entmake (list '(0 . "LWPOLYLINE")
                  '(100 . "AcDbEntity")
                  '(100 . "AcDbPolyline")
@@ -6365,17 +6378,40 @@
 
   (setq guide-ent (entlast))
 
-  ;; 오프셋 대상점 계산 (외측 방향)
-  (setq offset-pt (polar pt1 out-norm d))
+  ;; [수정] 오프셋 후 방향 검증 (tsp-create-cip-guideline 외측 재검증 로직 이식)
+  ;; 1차 시도: target-pt 방향으로 OFFSET
+  (setq offset-pt (list (car target-pt) (cadr target-pt) 0.0))
+  (command "._OFFSET" d guide-ent offset-pt "")
+  (setq off-ent (entlast))
 
-  (command "._OFFSET" d guide-ent
-           (list (car offset-pt) (cadr offset-pt) 0.0) "")
+  ;; off-ent가 guide-ent와 동일하면 OFFSET 실패
+  (if (equal off-ent guide-ent)
+    (setq off-ent nil)
+    (progn
+      ;; 오프셋된 선의 시작점 추출
+      (setq off-start (cdr (assoc 10 (entget off-ent))))
+
+      ;; target-pt와 거리가 0.1 초과이면 방향이 반대로 튄 것 → 삭제 후 반대 방향 재오프셋
+      (if (> (distance (list (car target-pt) (cadr target-pt))
+                       (list (car off-start) (cadr off-start)))
+             0.1)
+        (progn
+          (entdel off-ent)
+          ;; 반대 방향 OFFSET: target-pt의 반대편 점 사용
+          (setq offset-pt (list (car (polar pt1 (+ out-norm pi) d))
+                                (cadr (polar pt1 (+ out-norm pi) d))
+                                0.0))
+          (command "._OFFSET" d guide-ent offset-pt "")
+          (setq off-ent (entlast))
+          (if (equal off-ent guide-ent) (setq off-ent nil))
+        )
+      )
+    )
+  )
 
   (entdel guide-ent)
 
-  (setq guide-ent (entlast))
-
-  guide-ent
+  off-ent
 
 )
 
@@ -9706,7 +9742,7 @@
 
 ;;; --------------------------------------------------------------------------
 
-(defun get-segment-display-string (idx seg-data / s-id s-name is-defined s-draw s-support wall-str support-str s-brace-data s-brace-str s-spec s-custom wall-short w-spec w-custom wale-short has-anchor-str brace-short b-row-list num-b-rows first-b-row w-type cip-dia)
+(defun get-segment-display-string (idx seg-data / s-id s-name is-defined s-draw s-support wall-str support-str s-brace-data s-brace-str s-spec s-custom wall-short w-spec w-custom wale-short has-anchor-str brace-short b-row-list num-b-rows first-b-row w-type cip-dia cip-hidx-raw cip-hidx-val cip-hidx-safe cip-widx-raw cip-widx-val cip-widx-safe)
 
   (setq s-id (strcat (itoa (1+ idx))))
 
@@ -9810,27 +9846,27 @@
 
         (progn
 
-          ;; [7단계] CIP-HPILE-IDX nil 가드: nil이면 기본값 "0" 사용
-          (setq s-spec
-            (let* ((raw-idx (cdr (assoc 'CIP-HPILE-IDX seg-data)))
-                   (idx-val (if raw-idx (atoi raw-idx) 0))
-                   (safe-idx (if (and (>= idx-val 0) (< idx-val (length *tsp-std-wall-list*)))
-                                 idx-val 0)))
-              (nth safe-idx *tsp-std-wall-list*)))
+          ;; [7단계 수정] CIP-HPILE-IDX nil 가드 (let* 제거 → setq 순차 방식)
+          (setq cip-hidx-raw  (cdr (assoc 'CIP-HPILE-IDX seg-data)))
+          (setq cip-hidx-val  (if cip-hidx-raw (atoi cip-hidx-raw) 0))
+          (setq cip-hidx-safe (if (and (>= cip-hidx-val 0)
+                                       (< cip-hidx-val (length *tsp-std-wall-list*)))
+                                  cip-hidx-val 0))
+          (setq s-spec (nth cip-hidx-safe *tsp-std-wall-list*))
 
           (setq wall-short (format-h-spec-short s-spec nil nil))
 
-          ;; [7단계] CIP-DIA nil 가드: nil이면 기본값 "450" 사용
+          ;; [7단계 수정] CIP-DIA nil 가드
           (setq cip-dia (cdr (assoc 'CIP-DIA seg-data)))
           (if (not cip-dia) (setq cip-dia "450"))
 
-          ;; [7단계] CIP-WALE-IDX nil 가드: nil이면 기본값 "0" 사용
-          (setq w-spec
-            (let* ((raw-widx (cdr (assoc 'CIP-WALE-IDX seg-data)))
-                   (widx-val (if raw-widx (atoi raw-widx) 0))
-                   (safe-widx (if (and (>= widx-val 0) (< widx-val (length *tsp-std-wall-list*)))
-                                  widx-val 0)))
-              (nth safe-widx *tsp-std-wall-list*)))
+          ;; [7단계 수정] CIP-WALE-IDX nil 가드 (let* 제거 → setq 순차 방식)
+          (setq cip-widx-raw  (cdr (assoc 'CIP-WALE-IDX seg-data)))
+          (setq cip-widx-val  (if cip-widx-raw (atoi cip-widx-raw) 0))
+          (setq cip-widx-safe (if (and (>= cip-widx-val 0)
+                                       (< cip-widx-val (length *tsp-std-wall-list*)))
+                                  cip-widx-val 0))
+          (setq w-spec (nth cip-widx-safe *tsp-std-wall-list*))
 
           (setq wale-short (format-h-spec-short w-spec nil has-anchor-str))
 
