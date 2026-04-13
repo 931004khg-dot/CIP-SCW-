@@ -6009,73 +6009,41 @@
 ;;;;==========================================================================
 
 (defun tsp-create-cip-guideline (boundary-ent dia boundary-orient is-closed / vobj d start-pt p2 seg-angle out-norm target-pt off-obj off-ent off-start)
-
   (setq vobj (vlax-ename->vla-object boundary-ent))
-
   ;; dia가 문자열인지 숫자인지 판별하여 안전하게 처리 (에러 방지)
-
   (setq d (/ (if (= (type dia) 'STR) (atof dia) dia) 2.0))
 
-  
-
   ;; H-Pile 로직에서 추출한 완벽한 외측 벡터 계산 (안팎 판별 오류 방지)
-
   (setq start-pt (vlax-curve-getStartPoint vobj))
-
   (setq p2 (vlax-curve-getPointAtParam vobj 1.0))
-
   (setq seg-angle (angle start-pt p2))
-
   (setq out-norm (+ seg-angle (* boundary-orient (/ pi 2.0))))
 
-  (setq target-pt (polar start-pt out-norm d))
-
-  
+  ;; H-Pile과 완벽히 동일한 방식: 바깥쪽(흙 방향)을 향하도록 음수(-d) 적용
+  (setq target-pt (polar start-pt out-norm (- d)))
 
   ;; 양수 거리로 오프셋 후, 수학적으로 계산된 target-pt와 일치하는지 교차 검증
-
   (setq off-obj (vl-catch-all-apply 'vla-offset (list vobj d)))
-
   (if (not (vl-catch-all-error-p off-obj))
-
     (progn
-
       (setq off-ent (vlax-vla-object->ename (vlax-safearray-get-element (vlax-variant-value off-obj) 0)))
-
       (setq off-start (vlax-curve-getStartPoint (vlax-ename->vla-object off-ent)))
 
-      
-
       ;; 방향이 반대로 튀었을 경우 (오차 허용 0.1) 삭제 후 음수로 재오프셋
-
       (if (> (distance (list (car target-pt) (cadr target-pt)) (list (car off-start) (cadr off-start))) 0.1)
-
         (progn
-
           (entdel off-ent)
-
           (setq off-obj (vl-catch-all-apply 'vla-offset (list vobj (- d))))
-
           (if (not (vl-catch-all-error-p off-obj))
-
             (setq off-ent (vlax-vla-object->ename (vlax-safearray-get-element (vlax-variant-value off-obj) 0)))
-
             (setq off-ent nil)
-
           )
-
         )
-
       )
-
       off-ent
-
     )
-
     nil
-
   )
-
 )
 
 
@@ -6179,70 +6147,42 @@
 ;;;;==========================================================================
 
 (defun tsp-draw-cip-elements (layout dia interval-idx hpile-idx boundary-orient / interval items hpile-spec-name hpile-vals h b tw tf hpile-block idx dist pt ang outward-normal hpile-rotation insert-pt half-h-offset)
-
   (setq interval (cond ((= interval-idx "1") 2) ((= interval-idx "2") 3) (t 1)))
-
   (setq items (cdr (assoc 'ITEMS layout)))
 
-  
-
   ;; 기존 *tsp-std-wall-list* 완벽 연동
-
   (setq hpile-spec-name (nth (atoi hpile-idx) *tsp-std-wall-list*))
-
   (setq hpile-vals (parse-h-spec hpile-spec-name))
-
   (setq h (nth 0 hpile-vals) b (nth 1 hpile-vals) tw (nth 2 hpile-vals) tf (nth 3 hpile-vals))
-
   (setq hpile-block (create-hpile-section-block h b tw tf))
-
-  
 
   (create-layer-if-not-exists "_CIP원형" "8") ;; 외곽선 회색 지정
 
-  
-
   (foreach item items
-
     (setq idx (nth 0 item) dist (nth 1 item) pt (nth 2 item) ang (nth 3 item))
 
-    
-
     ;; 1. C.I.P 원형 외곽선 생성
-
     (entmake (list '(0 . "CIRCLE") (cons 8 "_CIP원형") (list 10 (car pt) (cadr pt) 0.0) (cons 40 (/ dia 2.0))))
 
-    
-
     ;; 2. H-Pile 생성 (간격 모듈러 연산 적용)
-
     (if (= (rem idx interval) 0)
-
       (progn
+        ;; 접선 각도(ang)에서 외측 벡터를 도출 후 90도 회전(H-Pile 웹 방향 세팅)
+        (setq outward-normal (+ ang (* boundary-orient (/ pi 2.0))))
+        (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
 
-         ;; 접선 각도(ang)에서 외측 벡터를 도출 후 90도 회전(H-Pile 웹 방향 세팅)
+        ;; H-Pile 단면 중심을 CIP 원 중심 pt에 맞추기 위한 보정
+        ;; 블록 기준점이 플랜지 바닥이므로 outward-normal 방향으로 +(h/2) 이동시켜야 정중앙에 위치함
+        (setq half-h-offset (/ h 2.0))
+        (setq insert-pt (polar pt outward-normal half-h-offset))
 
-         (setq outward-normal (+ ang (* boundary-orient (/ pi 2.0))))
-
-         (setq hpile-rotation (+ outward-normal (/ pi 2.0)))
-
-         ;; [③ 수정] 블록 기준점(0, -half_h)이 플렌지 바닥이므로
-         ;; H-Pile 단면 중심을 CIP 원 중심 pt에 맞추려면
-         ;; INSERT 점을 outward-normal 방향으로 -(h/2) 이동
-         (setq half-h-offset (/ h 2.0))
-         (setq insert-pt (polar pt outward-normal (- half-h-offset)))
-
-         (entmake (list '(0 . "INSERT") (cons 2 hpile-block) '(8 . "_측면말뚝")
-                        (list 10 (car insert-pt) (cadr insert-pt) 0.0)
-                        '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
-                        (cons 50 hpile-rotation)))
-
+        (entmake (list '(0 . "INSERT") (cons 2 hpile-block) '(8 . "_측면말뚝")
+                       (list 10 (car insert-pt) (cadr insert-pt) 0.0)
+                       '(41 . 1.0) '(42 . 1.0) '(43 . 1.0)
+                       (cons 50 hpile-rotation)))
       )
-
     )
-
   )
-
 )
 
 
@@ -6355,30 +6295,22 @@
 
 ;;;;==========================================================================
 
-(defun tsp-make-segment-guideline (pt1 pt2 dia boundary-orient
-                                   / seg-angle out-norm target-pt guide-ent d
-                                     off-ent off-start offset-pt)
-
+(defun tsp-make-segment-guideline (pt1 pt2 dia boundary-orient / seg-angle out-norm target-pt guide-ent d off-ent off-start offset-pt)
   (setq d (/ dia 2.0))
-
   (setq seg-angle (angle pt1 pt2))
-
   (setq out-norm (+ seg-angle (* boundary-orient (/ pi 2.0))))
 
-  ;; 수학적으로 외측 위치 계산 (tsp-create-cip-guideline과 동일 방식)
-  (setq target-pt (polar pt1 out-norm d))
+  ;; H-Pile과 동일한 판별 결과(boundary-orient)를 바탕으로,
+  ;; H-Pile(토류판)과 똑같이 바깥쪽을 향하도록 마이너스(-d) 방향 점 도출
+  (setq target-pt (polar pt1 out-norm (- d)))
 
   ;; pt1 → pt2 임시 직선 폴리선 생성
-  (entmake (list '(0 . "LWPOLYLINE")
-                 '(100 . "AcDbEntity")
-                 '(100 . "AcDbPolyline")
+  (entmake (list '(0 . "LWPOLYLINE") '(100 . "AcDbEntity") '(100 . "AcDbPolyline")
                  '(8 . "0") '(62 . 256) '(90 . 2) '(70 . 0)
                  (list 10 (car pt1) (cadr pt1))
                  (list 10 (car pt2) (cadr pt2))))
-
   (setq guide-ent (entlast))
 
-  ;; [수정] 오프셋 후 방향 검증 (tsp-create-cip-guideline 외측 재검증 로직 이식)
   ;; 1차 시도: target-pt 방향으로 OFFSET
   (setq offset-pt (list (car target-pt) (cadr target-pt) 0.0))
   (command "._OFFSET" d guide-ent offset-pt "")
@@ -6390,17 +6322,12 @@
     (progn
       ;; 오프셋된 선의 시작점 추출
       (setq off-start (cdr (assoc 10 (entget off-ent))))
-
       ;; target-pt와 거리가 0.1 초과이면 방향이 반대로 튄 것 → 삭제 후 반대 방향 재오프셋
-      (if (> (distance (list (car target-pt) (cadr target-pt))
-                       (list (car off-start) (cadr off-start)))
-             0.1)
+      (if (> (distance (list (car target-pt) (cadr target-pt)) (list (car off-start) (cadr off-start))) 0.1)
         (progn
           (entdel off-ent)
-          ;; 반대 방향 OFFSET: target-pt의 반대편 점 사용
-          (setq offset-pt (list (car (polar pt1 (+ out-norm pi) d))
-                                (cadr (polar pt1 (+ out-norm pi) d))
-                                0.0))
+          ;; 반대 방향 OFFSET: target-pt의 반대편 점(안쪽) 사용
+          (setq offset-pt (list (car (polar pt1 out-norm d)) (cadr (polar pt1 out-norm d)) 0.0))
           (command "._OFFSET" d guide-ent offset-pt "")
           (setq off-ent (entlast))
           (if (equal off-ent guide-ent) (setq off-ent nil))
@@ -6408,11 +6335,8 @@
       )
     )
   )
-
   (entdel guide-ent)
-
   off-ent
-
 )
 
 
